@@ -18,10 +18,15 @@ defmodule PlausibleWeb.Api.AdminEventsController do
   end
 
   def index(conn, params) do
-    with {:ok, site} <- get_site(conn, params) do
-      json(conn, %{site_id: site.domain, events: Enum.map(EventGoals.list(site), &serialize/1)})
-    else
-      error -> respond_error(conn, error)
+    case get_site(conn, params) do
+      {:ok, site} ->
+        json(conn, %{
+          site_id: site.domain,
+          events: Enum.map(EventGoals.list(site), &serialize/1)
+        })
+
+      error ->
+        respond_error(conn, error)
     end
   end
 
@@ -52,9 +57,14 @@ defmodule PlausibleWeb.Api.AdminEventsController do
          :ok <- EventGoals.delete(site, goal_id) do
       json(conn, %{deleted: true})
     else
-      :error -> H.bad_request(conn, "goal_id must be an integer")
-      {_goal_id, _remainder} -> H.bad_request(conn, "goal_id must be an integer")
-      error -> respond_error(conn, error)
+      :error ->
+        H.bad_request(conn, "goal_id must be an integer")
+
+      {parsed_id, _remainder} when is_integer(parsed_id) ->
+        H.bad_request(conn, "goal_id must be an integer")
+
+      error ->
+        respond_error(conn, error)
     end
   end
 

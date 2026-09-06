@@ -28,33 +28,8 @@ defmodule Plausible.EventGoals do
 
       Repo.transaction(fn ->
         existing_by_name = Map.new(list(site), &{&1.event_name, &1})
-
-        created =
-          Enum.reduce(event_names, [], fn event_name, created ->
-            case existing_by_name do
-              %{^event_name => _goal} ->
-                created
-
-              _ ->
-                case Goals.find_or_create(site, %{
-                       "goal_type" => "event",
-                       "event_name" => event_name
-                     }) do
-                  {:ok, goal} -> [goal | created]
-                  {:error, changeset} -> Repo.rollback({:invalid_event, changeset})
-                end
-            end
-          end)
-
-        deleted =
-          if prune? do
-            existing_by_name
-            |> Map.drop(event_names)
-            |> Map.values()
-            |> Enum.map(&delete_goal!(site, &1))
-          else
-            []
-          end
+        created = create_missing_goals(site, event_names, existing_by_name)
+        deleted = delete_missing_goals(site, event_names, existing_by_name, prune?)
 
         %{
           events: list(site),
@@ -80,14 +55,33 @@ defmodule Plausible.EventGoals do
     end
   end
 
+  defp create_missing_goals(site, event_names, existing_by_name) do
+    event_names
+    |> Enum.reject(&Map.has_key?(existing_by_name, &1))
+    |> Enum.map(&create_goal!(site, &1))
+  end
+
+  defp create_goal!(site, event_name) do
+    case Goals.find_or_create(site, %{"goal_type" => "event", "event_name" => event_name}) do
+      {:ok, goal} -> goal
+      {:error, changeset} -> Repo.rollback({:invalid_event, changeset})
+    end
+  end
+
+  defp delete_missing_goals(_site, _event_names, _existing_by_name, false), do: []
+
+  defp delete_missing_goals(site, event_names, existing_by_name, true) do
+    existing_by_name
+    |> Map.drop(event_names)
+    |> Map.values()
+    |> Enum.map(&delete_goal!(site, &1))
+  end
+
   defp normalize(event_names) when is_list(event_names) and length(event_names) <= @max_events do
     if Enum.all?(event_names, &is_binary/1) do
       names = event_names |> Enum.map(&String.trim/1) |> Enum.uniq()
 
-      cond do
-        Enum.any?(names, &(&1 == "")) -> {:error, :blank_event_name}
-        true -> {:ok, names}
-      end
+      if Enum.any?(names, &(&1 == "")), do: {:error, :blank_event_name}, else: {:ok, names}
     else
       {:error, :invalid_events}
     end
