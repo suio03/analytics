@@ -1,0 +1,192 @@
+#!/usr/bin/env python3
+"""Manage custom event goals on a self-hosted Plausible instance."""
+
+import argparse
+import json
+import os
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+
+
+class APIError(Exception):
+    pass
+
+
+class Client:
+    def __init__(self, base_url, api_key):
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+
+    def request(self, method, path, payload=None, query=None):
+        url = self.base_url + path
+        if query:
+            url += "?" + urllib.parse.urlencode(query)
+
+        body = None
+        headers = {
+            "Accept": "application/json",
+            "Authorization": "Bearer " + self.api_key,
+        }
+        if payload is not None:
+            body = json.dumps(payload).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+
+        request = urllib.request.Request(url, data=body, headers=headers, method=method)
+
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                raw = response.read()
+        except urllib.error.HTTPError as error:
+            raw = error.read()
+            try:
+                message = json.loads(raw.decode("utf-8")).get("error", raw.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                message = str(error)
+            raise APIError("HTTP {}: {}".format(error.code, message)) from error
+        except urllib.error.URLError as error:
+            raise APIError("Connection failed: {}".format(error.reason)) from error
+
+        if not raw:
+            return None
+        return json.loads(raw.decode("utf-8"))
+
+    def sites(self):
+        return self.request("GET", "/api/v1/admin/sites")
+
+    def events(self, site):
+        return self.request("GET", "/api/v1/admin/events", query={"site_id": site})
+
+    def add(self, site, events):
+        return self.request(
+            "POST", "/api/v1/admin/events", {"site_id": site, "events": events}
+        )
+
+    def sync(self, site, events, prune=False):
+        return self.request(
+            "PUT",
+            "/api/v1/admin/events",
+            {"site_id": site, "events": events, "prune": prune},
+        )
+
+    def delete(self, site, goal_id):
+        return self.request(
+            "DELETE",
+            "/api/v1/admin/events/{}".format(goal_id),
+            query={"site_id": site},
+        )
+
+
+def event_names_from_file(path):
+    with open(path, "r", encoding="utf-8") as handle:
+        contents = handle.read()
+
+    if path.endswith(".json"):
+        value = json.loads(contents)
+        if isinstance(value, dict):
+            value = value.get("events")
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            raise APIError("JSON file must be an array of strings or an object with an events array")
+        return value
+
+    return [line.strip() for line in contents.splitlines() if line.strip()]
+
+
+def print_sites(result):
+    for site in result["sites"]:
+        print("{}\t{}".format(site["domain"], site["timezone"]))
+
+
+def print_events(result):
+    for event in result["events"]:
+        print("{}\t{}".format(event["id"], event["event_name"]))
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(prog="plausible-admin")
+    parser.add_argument(
+        "--url", default=os.environ.get("PLAUSIBLE_URL"), help="Plausible base URL"
+    )
+    parser.add_argument(
+        "--api-key",
+        default=os.environ.get("PLAUSIBLE_API_KEY"),
+        help="Plausible account API key",
+    )
+
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("sites", help="List sites available to the API key")
+
+    events = commands.add_parser("events", help="Manage custom event goals")
+    event_commands = events.add_subparsers(dest="event_command", required=True)
+
+    list_parser = event_commands.add_parser("list", help="List a site's event goals")
+    list_parser.add_argument("site")
+
+    add_parser = event_commands.add_parser("add", help="Add one or more event goals")
+    add_parser.add_argument("site")
+    add_parser.add_argument("names", nargs="+")
+
+    remove_parser = event_commands.add_parser("remove", help="Remove event goals by name")
+    remove_parser.add_argument("site")
+    remove_parser.add_argument("names", nargs="+")
+
+    sync_parser = event_commands.add_parser("sync", help="Add event goals from a file")
+    sync_parser.add_argument("site")
+    sync_parser.add_argument("file")
+    sync_parser.add_argument(
+        "--prune",
+        action="store_true",
+        help="Also remove existing custom event goals absent from the file",
+    )
+
+    return parser
+
+
+def main():
+    parser = build_parser()
+    args = parser.parse_args()
+
+    if not args.url:
+        parser.error("set PLAUSIBLE_URL or pass --url")
+    if not args.api_key:
+        parser.error("set PLAUSIBLE_API_KEY or pass --api-key")
+
+    client = Client(args.url, args.api_key)
+
+    try:
+        if args.command == "sites":
+            print_sites(client.sites())
+            return 0
+
+        if args.event_command == "list":
+            print_events(client.events(args.site))
+        elif args.event_command == "add":
+            result = client.add(args.site, args.names)
+            print("Created: {}".format(", ".join(result["created"]) or "none"))
+            print_events(result)
+        elif args.event_command == "remove":
+            current = client.events(args.site)["events"]
+            ids_by_name = {event["event_name"]: event["id"] for event in current}
+            missing = [name for name in args.names if name not in ids_by_name]
+            if missing:
+                raise APIError("Event goals not found: {}".format(", ".join(missing)))
+            for name in args.names:
+                client.delete(args.site, ids_by_name[name])
+                print("Removed: {}".format(name))
+        elif args.event_command == "sync":
+            result = client.sync(
+                args.site, event_names_from_file(args.file), prune=args.prune
+            )
+            print("Created: {}".format(", ".join(result["created"]) or "none"))
+            print("Deleted: {}".format(", ".join(result["deleted"]) or "none"))
+            print_events(result)
+    except (APIError, OSError, json.JSONDecodeError) as error:
+        print("error: {}".format(error), file=sys.stderr)
+        return 1
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

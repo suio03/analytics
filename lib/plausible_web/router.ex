@@ -214,6 +214,16 @@ defmodule PlausibleWeb.Router do
     post "/query", ExternalQueryApiController, :query
   end
 
+  scope "/api/v1/admin", PlausibleWeb.Api, assigns: %{api_scope: "sites:read:*"} do
+    pipe_through [:public_api, PlausibleWeb.Plugs.AuthorizePublicAPI]
+
+    get "/sites", AdminEventsController, :sites
+    get "/events", AdminEventsController, :index
+    post "/events", AdminEventsController, :create
+    put "/events", AdminEventsController, :sync
+    delete "/events/:goal_id", AdminEventsController, :delete
+  end
+
   scope "/api/docs", PlausibleWeb.Api do
     get "/query/schema.json", ExternalQueryApiController, :schema
 
