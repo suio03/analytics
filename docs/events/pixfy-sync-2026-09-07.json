@@ -1,0 +1,230 @@
+{
+  "site_id": "pixfy.io",
+  "created": [
+    "checkout_entitlement_observed",
+    "signin_completed",
+    "signin_oauth_redirect"
+  ],
+  "before_count": 51,
+  "after_count": 54,
+  "active_events": 42,
+  "old_goals_preserved": true,
+  "verified_events": [
+    {
+      "id": 134,
+      "event_name": "checkout_cancelled"
+    },
+    {
+      "id": 176,
+      "event_name": "checkout_entitlement_observed"
+    },
+    {
+      "id": 13,
+      "event_name": "checkout_error"
+    },
+    {
+      "id": 11,
+      "event_name": "checkout_initiated"
+    },
+    {
+      "id": 12,
+      "event_name": "checkout_redirect"
+    },
+    {
+      "id": 133,
+      "event_name": "checkout_redirect_blocked"
+    },
+    {
+      "id": 65,
+      "event_name": "checkout_redirect_started"
+    },
+    {
+      "id": 76,
+      "event_name": "checkout_return_success_confirmed"
+    },
+    {
+      "id": 75,
+      "event_name": "checkout_return_success_page_view"
+    },
+    {
+      "id": 77,
+      "event_name": "checkout_return_success_pending"
+    },
+    {
+      "id": 67,
+      "event_name": "checkout_session_completed"
+    },
+    {
+      "id": 64,
+      "event_name": "checkout_session_create_failed"
+    },
+    {
+      "id": 62,
+      "event_name": "checkout_session_create_started"
+    },
+    {
+      "id": 63,
+      "event_name": "checkout_session_create_success"
+    },
+    {
+      "id": 61,
+      "event_name": "checkout_start_click"
+    },
+    {
+      "id": 7,
+      "event_name": "checkout_success"
+    },
+    {
+      "id": 66,
+      "event_name": "checkout_webhook_received"
+    },
+    {
+      "id": 69,
+      "event_name": "creem_payment_failed"
+    },
+    {
+      "id": 68,
+      "event_name": "creem_payment_succeeded"
+    },
+    {
+      "id": 135,
+      "event_name": "download_click"
+    },
+    {
+      "id": 137,
+      "event_name": "download_fail"
+    },
+    {
+      "id": 10,
+      "event_name": "download_gate_free_click"
+    },
+    {
+      "id": 8,
+      "event_name": "download_gate_shown"
+    },
+    {
+      "id": 60,
+      "event_name": "download_gate_subscribe_click"
+    },
+    {
+      "id": 9,
+      "event_name": "download_gate_upgrade_click"
+    },
+    {
+      "id": 136,
+      "event_name": "download_success"
+    },
+    {
+      "id": 74,
+      "event_name": "entitlement_grant_failed"
+    },
+    {
+      "id": 72,
+      "event_name": "entitlement_grant_started"
+    },
+    {
+      "id": 73,
+      "event_name": "entitlement_grant_success"
+    },
+    {
+      "id": 4,
+      "event_name": "generation_fail"
+    },
+    {
+      "id": 2,
+      "event_name": "generation_start"
+    },
+    {
+      "id": 3,
+      "event_name": "generation_success"
+    },
+    {
+      "id": 59,
+      "event_name": "paywall_dismissed"
+    },
+    {
+      "id": 58,
+      "event_name": "paywall_shown"
+    },
+    {
+      "id": 132,
+      "event_name": "plan_option_change"
+    },
+    {
+      "id": 131,
+      "event_name": "plan_option_view"
+    },
+    {
+      "id": 5,
+      "event_name": "pricing_view"
+    },
+    {
+      "id": 177,
+      "event_name": "signin_completed"
+    },
+    {
+      "id": 142,
+      "event_name": "signin_modal_open"
+    },
+    {
+      "id": 178,
+      "event_name": "signin_oauth_redirect"
+    },
+    {
+      "id": 143,
+      "event_name": "signin_success_from_modal"
+    },
+    {
+      "id": 129,
+      "event_name": "studio_action"
+    },
+    {
+      "id": 130,
+      "event_name": "studio_generation_result"
+    },
+    {
+      "id": 6,
+      "event_name": "subscribe_cta_click"
+    },
+    {
+      "id": 145,
+      "event_name": "subscription_cancelled"
+    },
+    {
+      "id": 144,
+      "event_name": "subscription_created"
+    },
+    {
+      "id": 71,
+      "event_name": "subscription_payment_failed"
+    },
+    {
+      "id": 70,
+      "event_name": "subscription_payment_succeeded"
+    },
+    {
+      "id": 146,
+      "event_name": "subscription_resumed"
+    },
+    {
+      "id": 1,
+      "event_name": "tool_visit"
+    },
+    {
+      "id": 141,
+      "event_name": "topup_checkout_error"
+    },
+    {
+      "id": 139,
+      "event_name": "topup_checkout_initiated"
+    },
+    {
+      "id": 140,
+      "event_name": "topup_checkout_success"
+    },
+    {
+      "id": 138,
+      "event_name": "topup_view"
+    }
+  ]
+}
