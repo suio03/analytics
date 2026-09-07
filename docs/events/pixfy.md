@@ -6,7 +6,7 @@
 bin/plausible-admin events sync pixfy.io docs/events/pixfy.json
 ```
 
-Do not use `--prune` for this migration: retain existing goal IDs and historical reporting. The website changes have not been deployed by this task. Creating goals does not deploy tracking code or produce conversions.
+Do not use `--prune` for this migration: retain existing goal IDs and historical reporting. Pixfy tracking code was deployed on 2026-09-07 in commit `e57ecae` ([successful CI run](https://github.com/suio03/pixfy/actions/runs/34125507845)). Read-only production checks returned 200 for the homepage, Chinese pricing and Studio continuation pages; loaded scripts contain the new login event names. Creating goals alone does not produce conversions, and these checks do not claim end-to-end login/payment event receipt.
 
 ## New goals
 
