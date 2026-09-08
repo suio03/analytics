@@ -41,12 +41,7 @@ defmodule PlausibleWeb.PaymentsController do
         |> redirect(to: path(conn, "/settings"))
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        errors =
-          Ecto.Changeset.traverse_errors(changeset, fn {message, opts} ->
-            Enum.reduce(opts, message, fn {key, value}, message ->
-              String.replace(message, "%{#{key}}", to_string(value))
-            end)
-          end)
+        errors = Ecto.Changeset.traverse_errors(changeset, &translate_error/1)
 
         message =
           Enum.map_join(errors, "; ", fn {field, messages} ->
@@ -76,6 +71,12 @@ defmodule PlausibleWeb.PaymentsController do
       |> put_flash(:error, "Could not queue sync. Please try again.")
       |> redirect(to: path(conn))
     end
+  end
+
+  defp translate_error({message, opts}) do
+    Enum.reduce(opts, message, fn {key, value}, message ->
+      String.replace(message, "%{#{key}}", to_string(value))
+    end)
   end
 
   defp render_settings(conn, error \\ nil) do

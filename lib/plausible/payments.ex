@@ -38,10 +38,8 @@ defmodule Plausible.Payments do
     Repo.transaction(fn ->
       case integration |> Integration.changeset(attrs) |> Repo.insert_or_update() do
         {:ok, saved} ->
-          case enqueue(saved.id) do
-            {:ok, _} -> saved
-            {:error, reason} -> Repo.rollback(reason)
-          end
+          enqueue_or_rollback(saved.id)
+          saved
 
         {:error, changeset} ->
           Repo.rollback(changeset)
@@ -108,36 +106,42 @@ defmodule Plausible.Payments do
       end
 
     if is_binary(id) && is_binary(type) && occurred_at do
-      now = DateTime.utc_now()
-
-      Repo.transaction(fn ->
-        {count, _} =
-          Repo.insert_all(
-            Event,
-            [
-              %{
-                integration_id: integration.id,
-                external_id: id,
-                event_type: type,
-                transaction_id: transaction_id,
-                occurred_at: occurred_at,
-                inserted_at: now,
-                updated_at: now
-              }
-            ],
-            on_conflict: :nothing,
-            conflict_target: [:integration_id, :external_id]
-          )
-
-        if count == 1 do
-          case enqueue(integration.id) do
-            {:ok, _} -> :ok
-            {:error, reason} -> Repo.rollback(reason)
-          end
-        end
-      end)
+      store_event(integration.id, id, type, transaction_id, occurred_at)
     else
       {:error, :invalid_event}
+    end
+  end
+
+  defp store_event(integration_id, id, type, transaction_id, occurred_at) do
+    now = DateTime.utc_now()
+
+    Repo.transaction(fn ->
+      {count, _} =
+        Repo.insert_all(
+          Event,
+          [
+            %{
+              integration_id: integration_id,
+              external_id: id,
+              event_type: type,
+              transaction_id: transaction_id,
+              occurred_at: occurred_at,
+              inserted_at: now,
+              updated_at: now
+            }
+          ],
+          on_conflict: :nothing,
+          conflict_target: [:integration_id, :external_id]
+        )
+
+      if count == 1, do: enqueue_or_rollback(integration_id)
+    end)
+  end
+
+  defp enqueue_or_rollback(integration_id) do
+    case enqueue(integration_id) do
+      {:ok, _} -> :ok
+      {:error, reason} -> Repo.rollback(reason)
     end
   end
 

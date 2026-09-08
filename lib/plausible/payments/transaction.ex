@@ -1,4 +1,5 @@
 defmodule Plausible.Payments.Transaction do
+  @moduledoc "Normalized provider transaction amounts and details."
   use Ecto.Schema
 
   schema "payment_transactions" do
@@ -29,6 +30,7 @@ defmodule Plausible.Payments.Transaction do
 end
 
 defmodule Plausible.Payments.Event do
+  @moduledoc "Deduplicated webhook receipt without a raw provider payload."
   use Ecto.Schema
 
   schema "payment_events" do

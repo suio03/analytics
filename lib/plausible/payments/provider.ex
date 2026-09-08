@@ -46,25 +46,25 @@ defmodule Plausible.Payments.Provider do
              page_number: page,
              page_size: 50
            ),
-         :ok <-
-           consume_all(rows, fn row ->
-             with {:ok, customer} <- customer(integration, row["customer"]) do
-               if row["mode"] in if(integration.environment == "sandbox",
-                    do: ["test", "sandbox"],
-                    else: ["prod"]
-                  ) do
-                 consume.(Normalize.creem(row, product, customer))
-               else
-                 {:error, :environment_mismatch}
-               end
-             end
-           end) do
+         :ok <- consume_all(rows, &consume_creem(&1, integration, product, consume)) do
       total_pages = pagination["totalPages"] || pagination["total_pages"]
       more = if is_number(total_pages), do: page < total_pages, else: length(rows) == 50
       if more && rows != [], do: creem_page(integration, product, page + 1, consume), else: :ok
     else
       {:error, _} = error -> error
       _ -> {:error, :invalid_response}
+    end
+  end
+
+  defp consume_creem(row, integration, product, consume) do
+    modes = if integration.environment == "sandbox", do: ["test", "sandbox"], else: ["prod"]
+
+    with {:ok, customer} <- customer(integration, row["customer"]) do
+      if row["mode"] in modes do
+        consume.(Normalize.creem(row, product, customer))
+      else
+        {:error, :environment_mismatch}
+      end
     end
   end
 

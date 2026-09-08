@@ -1,4 +1,5 @@
 defmodule Plausible.Workers.SyncPayments do
+  @moduledoc "Imports an atomic, serialized snapshot of one payment connection."
   use Oban.Worker,
     queue: :payments,
     max_attempts: 5,
@@ -19,22 +20,7 @@ defmodule Plausible.Workers.SyncPayments do
               :ok
 
             integration ->
-              observed_at = DateTime.utc_now()
-
-              case Provider.sync(
-                     integration,
-                     &Plausible.Payments.store(integration, &1, observed_at)
-                   ) do
-                :ok ->
-                  integration
-                  |> Ecto.Changeset.change(last_synced_at: DateTime.utc_now(), last_error: nil)
-                  |> Repo.update!()
-
-                  :ok
-
-                {:error, reason} ->
-                  Repo.rollback(reason)
-              end
+              sync_integration(integration)
           end
         end,
         timeout: :timer.minutes(30)
@@ -48,6 +34,22 @@ defmodule Plausible.Workers.SyncPayments do
         message = error_message(reason)
         Repo.update_all(from(i in Integration, where: i.id == ^id), set: [last_error: message])
         {:error, message}
+    end
+  end
+
+  defp sync_integration(integration) do
+    observed_at = DateTime.utc_now()
+
+    case Provider.sync(integration, &Plausible.Payments.store(integration, &1, observed_at)) do
+      :ok ->
+        integration
+        |> Ecto.Changeset.change(last_synced_at: DateTime.utc_now(), last_error: nil)
+        |> Repo.update!()
+
+        :ok
+
+      {:error, reason} ->
+        Repo.rollback(reason)
     end
   end
 
@@ -67,6 +69,7 @@ defmodule Plausible.Workers.SyncPayments do
 end
 
 defmodule Plausible.Workers.ReconcilePayments do
+  @moduledoc "Queues periodic reconciliation for all payment connections."
   use Oban.Worker, queue: :payments
   import Ecto.Query
 
