@@ -84,6 +84,7 @@ defmodule PlausibleWeb.Endpoint do
   plug(Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],
+    body_reader: {PlausibleWeb.Plugs.PaymentBodyReader, :read_body, []},
     json_decoder: Phoenix.json_library()
   )
 

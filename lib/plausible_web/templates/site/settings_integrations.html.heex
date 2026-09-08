@@ -1,4 +1,14 @@
 <.settings_tiles>
+  <.tile>
+    <:title>Payments</:title>
+    <:subtitle>View Paddle and Creem transactions for this site</:subtitle>
+    <p class="text-sm text-gray-500 mb-4">
+      Connect a payment provider to sync orders, refunds and revenue.
+    </p>
+    <.button_link href={"/#{URI.encode_www_form(@site.domain)}/transactions/settings"}>
+      Manage payment connections
+    </.button_link>
+  </.tile>
   <PlausibleWeb.Components.Settings.settings_search_console
     conn={@conn}
     site={@site}

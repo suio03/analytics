@@ -119,6 +119,11 @@ defmodule PlausibleWeb.Router do
     end
   end
 
+  scope "/api/payments", PlausibleWeb.Api do
+    pipe_through :public_api
+    post "/webhooks/:token", PaymentWebhookController, :webhook
+  end
+
   scope path: "/api/plugins", as: :plugins_api do
     pipeline :plugins_api_auth do
       plug(PlausibleWeb.Plugs.AuthorizePluginsAPI)
@@ -472,6 +477,12 @@ defmodule PlausibleWeb.Router do
         live "/:domain/verification", Verification, :verification, as: :site
       end
     end
+
+    get "/:domain/transactions", PaymentsController, :index
+    get "/:domain/transactions/settings", PaymentsController, :settings
+    post "/:domain/transactions/settings", PaymentsController, :save
+    post "/:domain/transactions/sync", PaymentsController, :sync
+    get "/:domain/transactions/:id", PaymentsController, :show
 
     get "/:domain/settings", SiteController, :settings
     get "/:domain/settings/general", SiteController, :settings_general

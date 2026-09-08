@@ -78,3 +78,6 @@ config :sentry,
   root_source_code_path: [File.cwd!()]
 
 import_config "#{config_env()}.exs"
+
+# Payment credentials and provider payloads must never enter request logs.
+config :phoenix, :filter_parameters, ["password", "secret", "token", "api_key", "data", "object"]

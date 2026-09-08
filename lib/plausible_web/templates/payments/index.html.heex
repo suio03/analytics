@@ -1,0 +1,271 @@
+<.frame site={@site}>
+  <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Transactions</h1>
+      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+        Payments, renewals and refunds for <%= @site.domain %>.
+      </p>
+    </div>
+    <div class="flex items-center gap-3">
+      <a
+        href={path(@site, "/settings")}
+        class="text-sm font-medium text-indigo-600 dark:text-indigo-400"
+      >
+        Payment connections
+      </a>
+      <form :if={@integrations != []} method="post" action={path(@site, "/sync")}>
+        <input type="hidden" name="_csrf_token" value={csrf()} />
+        <button type="submit" class="button">Sync now</button>
+      </form>
+    </div>
+  </div>
+
+  <div
+    :if={@integrations == []}
+    class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-10 sm:p-16 text-center"
+  >
+    <div class="text-3xl mb-4" aria-hidden="true">↗</div>
+    <h2 class="text-xl font-semibold">Your payments, alongside your analytics</h2>
+    <p class="max-w-lg mx-auto mt-3 mb-6 text-gray-500 dark:text-gray-400">
+      Connect Paddle or Creem to see real transactions here. Choose this site's products, import historical orders and keep them up to date.
+    </p>
+    <a href={path(@site, "/settings")} class="button">Connect a payment provider</a>
+    <p class="mt-5 text-xs text-gray-500">Visible only to site owners and administrators.</p>
+  </div>
+
+  <div :if={@integrations != []}>
+    <div class="flex flex-wrap gap-x-6 gap-y-2 mb-6 text-xs text-gray-500 dark:text-gray-400">
+      <div :for={i <- @integrations}>
+        <span class="font-semibold"><%= provider_name(i.provider) %> · <%= i.environment %></span>
+        <span :if={i.last_synced_at}>· Synced <%= timestamp(i.last_synced_at, @site) %></span>
+        <span :if={!i.last_synced_at}> · Awaiting first sync</span>
+        <p :if={i.last_error} role="alert" class="mt-1 text-red-600 dark:text-red-400">
+          <%= i.last_error %>
+        </p>
+      </div>
+    </div>
+
+    <div
+      :if={@filters["environment"] == "sandbox"}
+      class="p-3 mb-4 rounded-lg bg-yellow-100 text-yellow-900 text-sm"
+    >
+      Sandbox transactions — these are test payments.
+    </div>
+    <div
+      :for={summary <- @result.summary}
+      class="mb-4 grid grid-cols-2 lg:grid-cols-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 divide-x divide-gray-100 dark:divide-gray-700"
+    >
+      <div class="p-5">
+        <p class="text-xs text-gray-500 dark:text-gray-400">
+          Amount collected · <%= summary.currency %>
+        </p>
+        <p class="mt-2 text-2xl font-semibold tabular-nums">
+          <%= money(summary.paid, summary.currency) %>
+        </p>
+        <p class="mt-2 text-xs text-gray-500">
+          Before refunds · <%= summary.paid_known %> amounts reported
+        </p>
+      </div>
+      <div class="p-5">
+        <p class="text-xs text-gray-500 dark:text-gray-400">
+          Net earnings · <%= summary.currency %>
+        </p>
+        <p class="mt-2 text-2xl font-semibold tabular-nums">
+          <%= money(summary.net, summary.currency) %>
+        </p>
+        <p class="mt-2 text-xs text-gray-500">
+          <%= summary.net_known %> earnings amounts reported
+        </p>
+      </div>
+      <div class="p-5">
+        <p class="text-xs text-gray-500 dark:text-gray-400">Successful transactions</p>
+        <p class="mt-2 text-2xl font-semibold tabular-nums"><%= summary.successful %></p>
+        <p class="mt-2 text-xs text-gray-500">
+          Refunded: <%= money(summary.refunded, summary.currency) %>
+        </p>
+      </div>
+      <div class="p-5">
+        <p class="text-xs text-gray-500 dark:text-gray-400">Incomplete transactions</p>
+        <p class="mt-2 text-2xl font-semibold tabular-nums"><%= summary.incomplete %></p>
+        <p class="mt-2 text-xs text-gray-500">Not included in collected amounts</p>
+      </div>
+    </div>
+
+    <form method="get" action={path(@site)} class="my-6 space-y-3">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 sm:col-span-2">
+          Search transactions
+          <input
+            type="search"
+            name="q"
+            value={@filters["q"]}
+            placeholder="Customer email or transaction ID"
+            class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 text-sm"
+          />
+        </label>
+        <.filter_select
+          name="status"
+          label="Status"
+          value={@filters["status"]}
+          options={
+            [{"All statuses", ""}] ++
+              Enum.map(
+                ~w(paid incomplete failed partially_refunded refunded disputed canceled),
+                &{display_label(&1), &1}
+              )
+          }
+        />
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <.filter_select
+          name="provider"
+          label="Provider"
+          value={@filters["provider"]}
+          options={[{"All providers", ""}, {"Paddle", "paddle"}, {"Creem", "creem"}]}
+        />
+        <.filter_select
+          name="product"
+          label="Product"
+          value={@filters["product"]}
+          options={
+            [{"All products", ""}] ++
+              (@integrations
+               |> Enum.flat_map(& &1.product_ids)
+               |> Enum.uniq()
+               |> Enum.map(&{&1, &1}))
+          }
+        />
+        <.filter_select
+          name="kind"
+          label="Purchase type"
+          value={@filters["kind"]}
+          options={[
+            {"All types", ""},
+            {"First purchase", "first_purchase"},
+            {"Renewal", "renewal"},
+            {"One-time", "one_time"},
+            {"Subscription (unspecified)", "subscription"},
+            {"Subscription change", "subscription_change"}
+          ]}
+        />
+        <.filter_select
+          name="currency"
+          label="Currency"
+          value={@filters["currency"]}
+          options={[{"All currencies", ""}] ++ Enum.map(@currencies, &{&1, &1})}
+        />
+      </div>
+      <div class="flex flex-wrap items-end gap-3">
+        <label class="block text-xs font-medium text-gray-500 dark:text-gray-400">
+          Created from
+          <input
+            type="date"
+            name="from"
+            value={@filters["from"]}
+            class="mt-1 block rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 text-sm"
+          />
+        </label>
+        <label class="block text-xs font-medium text-gray-500 dark:text-gray-400">
+          Created through
+          <input
+            type="date"
+            name="to"
+            value={@filters["to"]}
+            class="mt-1 block rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 text-sm"
+          />
+        </label>
+        <.filter_select
+          name="environment"
+          label="Environment"
+          value={@filters["environment"]}
+          options={[{"Live", "live"}, {"Sandbox", "sandbox"}]}
+        />
+        <button class="button" type="submit">Apply filters</button>
+        <a href={path(@site)} class="text-sm text-gray-500 underline pb-2">Reset</a>
+      </div>
+    </form>
+
+    <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm text-left">
+          <thead class="bg-gray-50 dark:bg-gray-850 text-xs text-gray-500 dark:text-gray-400">
+            <tr>
+              <th class="px-5 py-3">Product / customer</th>
+              <th class="px-4 py-3">Type</th>
+              <th class="px-4 py-3 text-right">Amount</th>
+              <th class="px-4 py-3">Payment method</th>
+              <th class="px-4 py-3">Created / paid</th>
+              <th class="px-4 py-3">Status</th>
+              <th class="px-4 py-3"><span class="sr-only">Details</span></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+            <tr :for={t <- @result.rows} class="hover:bg-gray-50 dark:hover:bg-gray-850">
+              <td class="px-5 py-5">
+                <a href={path(@site, "/#{t.id}")} class="font-medium hover:text-indigo-600">
+                  <%= product_name(t) %>
+                </a>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  <%= value(t.customer_email) %>
+                </p>
+                <p class="mt-1 text-xs text-gray-400">
+                  <%= provider_name(t.integration.provider) %>
+                </p>
+              </td>
+              <td class="px-4 py-5 text-xs whitespace-nowrap"><%= display_label(t.kind) %></td>
+              <td class="px-4 py-5 text-right tabular-nums whitespace-nowrap">
+                <%= money(t.paid_amount || t.amount, t.currency) %>
+                <p class="text-xs text-gray-400 mt-1">
+                  <%= t.currency %><%= if t.status == "incomplete", do: " · Due" %>
+                </p>
+              </td>
+              <td class="px-4 py-5 whitespace-nowrap"><%= method(t) %></td>
+              <td class="px-4 py-5 text-xs whitespace-nowrap">
+                <%= timestamp(t.occurred_at, @site) %>
+                <p class="mt-1 text-gray-500">Paid: <%= timestamp(t.paid_at, @site) %></p>
+              </td>
+              <td class="px-4 py-5"><.status_badge status={t.status} /></td>
+              <td class="px-4 py-5">
+                <a
+                  href={path(@site, "/#{t.id}")}
+                  aria-label={"View transaction #{t.external_id}"}
+                  class="text-indigo-600 dark:text-indigo-400 text-sm"
+                >
+                  Details →
+                </a>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div :if={@result.rows == []} class="p-12 text-center">
+        <h2 class="font-semibold">No transactions to show</h2>
+        <p class="mt-2 text-sm text-gray-500">
+          Try another filter, or sync your payment connections.
+        </p>
+      </div>
+      <div class="flex justify-between items-center px-5 py-4 border-t border-gray-100 dark:border-gray-700 text-xs text-gray-500">
+        <span><%= @result.count %> transactions · Page <%= @filters["page"] %></span>
+        <div class="flex gap-4">
+          <a
+            :if={@filters["page"] > 1}
+            href={query_path(@site, @filters, @filters["page"] - 1)}
+            class="text-indigo-600"
+          >
+            ← Previous
+          </a>
+          <a
+            :if={@result.has_more}
+            href={query_path(@site, @filters, @filters["page"] + 1)}
+            class="text-indigo-600"
+          >
+            Next →
+          </a>
+        </div>
+      </div>
+    </div>
+    <p class="mt-4 text-xs text-gray-500 dark:text-gray-400">
+      Dates use <%= @site.timezone %>. Totals follow the creation-date filters. Missing amounts are shown as —. Creem's transaction API does not include abandoned checkouts.
+    </p>
+  </div>
+</.frame>

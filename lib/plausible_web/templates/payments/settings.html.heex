@@ -1,0 +1,132 @@
+<.frame site={@site} active="settings">
+  <a href={path(@site)} class="text-sm text-indigo-600 dark:text-indigo-400">← Transactions</a>
+  <h1 class="text-2xl font-bold tracking-tight mt-6">Payment connections</h1>
+  <p class="mt-2 mb-8 text-sm text-gray-500 dark:text-gray-400">
+    Connect this site's products to import transactions. Credentials are encrypted and only used on the server.
+  </p>
+  <div :if={@error} role="alert" class="p-4 mb-6 rounded-lg bg-red-50 text-red-700 text-sm">
+    <%= @error %>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <section
+      :for={provider <- ["paddle", "creem"]}
+      class="p-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+    >
+      <h2 class="text-xl font-semibold"><%= provider_name(provider) %></h2>
+      <p class="mt-2 text-sm text-gray-500">
+        <%= if provider == "paddle",
+          do: "Paddle Billing transactions, including incomplete checkouts and renewals.",
+          else:
+            "Creem payments and refunds. Abandoned checkouts are not available from the transaction API." %>
+      </p>
+      <form action={path(@site, "/settings")} method="post" class="mt-6 space-y-5">
+        <input type="hidden" name="_csrf_token" value={csrf()} />
+        <input type="hidden" name="integration[provider]" value={provider} />
+        <input type="hidden" name="integration[webhook_token]" value={@webhook_tokens[provider]} />
+        <label class="block text-sm font-medium">
+          New connection webhook URL
+          <input
+            readonly
+            value={PlausibleWeb.Endpoint.url() <> "/api/payments/webhooks/" <> @webhook_tokens[provider]}
+            class="mt-2 w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-850 text-xs font-mono"
+            onclick="this.select()"
+          />
+          <span class="block text-xs font-normal text-gray-500 mt-1">
+            Create a webhook destination with this URL, then paste its signing secret below and save. For an existing connection, keep the URL listed under Connected accounts.
+          </span>
+        </label>
+        <.filter_select
+          name="integration[environment]"
+          label="Environment"
+          options={[{"Live", "live"}, {"Sandbox", "sandbox"}]}
+          value="live"
+        />
+        <label class="block text-sm font-medium">
+          Product IDs <textarea
+            name="integration[product_ids]"
+            rows="3"
+            placeholder={if provider == "paddle", do: "pro_…", else: "prod_…"}
+            class="mt-2 w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-850 font-mono text-xs"
+          ></textarea>
+          <span class="block text-xs font-normal text-gray-500 mt-1">
+            Comma-separated IDs from your product catalog. Required for a new connection. Only orders entirely belonging to these products are imported.
+          </span>
+        </label>
+        <label class="block text-sm font-medium">
+          API key
+          <input
+            type="password"
+            name="integration[api_key]"
+            autocomplete="new-password"
+            class="mt-2 w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-850 text-sm"
+          />
+          <span class="block text-xs font-normal text-gray-500 mt-1">
+            <%= if provider == "paddle",
+              do:
+                "Use a server-side Billing API key with transaction read access and access to related customers, addresses and adjustments.",
+              else: "Use the API key for the selected environment." %>
+          </span>
+        </label>
+        <label class="block text-sm font-medium">
+          Webhook signing secret
+          <input
+            type="password"
+            name="integration[webhook_secret]"
+            autocomplete="new-password"
+            class="mt-2 w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-850 text-sm"
+          />
+          <span class="block text-xs font-normal text-gray-500 mt-1">
+            Required for a new connection. Existing secrets are preserved when left blank.
+          </span>
+        </label>
+        <button class="button" type="submit">
+          Save <%= provider_name(provider) %> connection
+        </button>
+      </form>
+    </section>
+  </div>
+
+  <h2 class="text-lg font-semibold mt-10 mb-4">Connected accounts</h2>
+  <p :if={@integrations == []} class="text-sm text-gray-500">No payment connections yet.</p>
+  <section
+    :for={i <- @integrations}
+    class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 mb-4"
+  >
+    <h3 class="font-semibold"><%= provider_name(i.provider) %> · <%= i.environment %></h3>
+    <p class="text-xs text-gray-500 mt-2">
+      Last successful sync: <%= timestamp(i.last_synced_at, @site) %>
+    </p>
+    <p :if={i.last_error} role="alert" class="text-sm text-red-600 mt-2"><%= i.last_error %></p>
+    <p class="text-sm mt-4">
+      Mapped products:
+      <span class="font-mono text-xs break-all"><%= Enum.join(i.product_ids, ", ") %></span>
+    </p>
+    <label class="block text-sm font-medium mt-5">
+      Webhook URL
+      <input
+        readonly
+        value={PlausibleWeb.Endpoint.url() <> "/api/payments/webhooks/" <> i.webhook_token}
+        class="mt-2 w-full rounded-md bg-gray-50 dark:bg-gray-850 border-gray-300 dark:border-gray-600 text-xs font-mono"
+        onclick="this.select()"
+      />
+    </label>
+    <p class="mt-3 text-xs text-gray-500">
+      Subscribe to <%= if i.provider == "paddle",
+        do:
+          "transaction.created, transaction.updated, transaction.completed, transaction.payment_failed, transaction.canceled, adjustment.created and adjustment.updated.",
+        else: "checkout.completed, subscription.paid, refund.created and dispute.created." %>
+    </p>
+  </section>
+  <div class="mt-8 text-sm text-gray-500 dark:text-gray-400 space-y-3 max-w-3xl">
+    <p>
+      Configure the webhook URL before saving this form. The endpoint becomes active after saving. If you reload before saving, use the new URL shown above.
+    </p>
+    <p>
+      Saving starts a historical import. Automatic reconciliation runs every 30 minutes when background scheduling is enabled. You can also use Sync now.
+    </p>
+    <p>
+      Product mappings stay fixed after connection to protect historical attribution. To rotate credentials, select the same provider and environment above and enter only the new secrets.
+    </p>
+  </div>
+</.frame>
