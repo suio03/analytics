@@ -79,4 +79,53 @@ defmodule PlausibleWeb.PaymentsControllerTest do
     assert get(conn, "/#{site.domain}/transactions") |> html_response(404)
     assert post(conn, "/#{site.domain}/transactions/sync") |> html_response(404)
   end
+
+  test "connected accounts expose additive forms and save to the selected environment", %{
+    conn: conn,
+    site: site
+  } do
+    for provider <- ["paddle", "creem"] do
+      product = if provider == "paddle", do: "pro_existing", else: "prod_existing"
+      added = if provider == "paddle", do: "pro_added", else: "prod_added"
+
+      accounts =
+        for environment <- ["live", "sandbox"] do
+          Repo.insert!(%Integration{
+            site_id: site.id,
+            provider: provider,
+            environment: environment,
+            api_key: "never-render-this-api-key",
+            webhook_secret: "never-render-this-signature",
+            webhook_token: Ecto.UUID.generate(),
+            product_ids: [product]
+          })
+        end
+
+      html = get(conn, "/payments.example/transactions/settings") |> html_response(200)
+      assert html =~ "Add products and sync"
+      assert html =~ product
+      refute html =~ "never-render-this-api-key"
+      refute html =~ "never-render-this-signature"
+
+      for account <- accounts do
+        assert html =~ account.webhook_token
+      end
+
+      response =
+        post(conn, "/payments.example/transactions/settings", %{
+          "integration" => %{
+            "provider" => provider,
+            "environment" => "sandbox",
+            "product_ids" => added
+          }
+        })
+
+      assert redirected_to(response) == "/payments.example/transactions/settings"
+      [live, sandbox] = Enum.map(accounts, &Repo.get!(Integration, &1.id))
+      assert live.product_ids == [product]
+      assert sandbox.product_ids == [product, added]
+      assert sandbox.api_key == "never-render-this-api-key"
+      assert sandbox.webhook_token == List.last(accounts).webhook_token
+    end
+  end
 end

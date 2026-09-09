@@ -4,7 +4,7 @@ defmodule Plausible.Payments.Secret do
 end
 
 defmodule Plausible.Payments.Integration do
-  @moduledoc "Encrypted provider credentials and fixed site product mapping."
+  @moduledoc "Encrypted provider credentials and additive site product mapping."
   use Ecto.Schema
   import Ecto.Changeset
 

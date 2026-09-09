@@ -15,27 +15,23 @@ defmodule Plausible.Payments do
           else: ids
       end)
 
-    existing =
-      Repo.get_by(Integration,
-        site_id: site_id,
-        provider: attrs["provider"],
-        environment: attrs["environment"] || "live"
-      )
-
-    integration = existing || %Integration{site_id: site_id, webhook_token: Ecto.UUID.generate()}
-
-    attrs =
-      if existing, do: attrs, else: Map.put_new(attrs, "webhook_token", integration.webhook_token)
-
-    # Mapping and environment are fixed after connection to protect historical site attribution.
-    attrs =
-      if existing,
-        do:
-          Map.take(attrs, ~w(api_key webhook_secret))
-          |> Map.reject(fn {_, v} -> v in [nil, ""] end),
-        else: attrs
-
     Repo.transaction(fn ->
+      # Serialize additions with other saves and snapshots so concurrent updates retain all IDs.
+      existing =
+        Repo.one(
+          from(i in Integration,
+            where:
+              i.site_id == ^site_id and i.provider == ^attrs["provider"] and
+                i.environment == ^(attrs["environment"] || "live"),
+            lock: "FOR UPDATE"
+          )
+        )
+
+      integration =
+        existing || %Integration{site_id: site_id, webhook_token: Ecto.UUID.generate()}
+
+      attrs = integration_attrs(existing, integration, attrs)
+
       case integration |> Integration.changeset(attrs) |> Repo.insert_or_update() do
         {:ok, saved} ->
           enqueue_or_rollback(saved.id)
@@ -46,6 +42,21 @@ defmodule Plausible.Payments do
       end
     end)
   end
+
+  defp integration_attrs(nil, integration, attrs),
+    do: Map.put_new(attrs, "webhook_token", integration.webhook_token)
+
+  defp integration_attrs(existing, _integration, attrs) do
+    # Existing products and the webhook identity are retained; secrets rotate only if supplied.
+    attrs
+    |> Map.take(~w(api_key webhook_secret))
+    |> Map.reject(fn {_, v} -> v in [nil, ""] end)
+    |> Map.put("product_ids", merge_product_ids(existing.product_ids, attrs["product_ids"]))
+  end
+
+  defp merge_product_ids(existing, nil), do: existing
+  defp merge_product_ids(existing, ids) when is_list(ids), do: Enum.uniq(existing ++ ids)
+  defp merge_product_ids(_existing, invalid), do: invalid
 
   def enqueue(id),
     do: %{"integration_id" => id} |> Plausible.Workers.SyncPayments.new() |> Oban.insert()

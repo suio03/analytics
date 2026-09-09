@@ -8,6 +8,56 @@
     <%= @error %>
   </div>
 
+  <h2 class="text-lg font-semibold mt-10 mb-4">Connected accounts</h2>
+  <p :if={@integrations == []} class="text-sm text-gray-500">No payment connections yet.</p>
+  <section
+    :for={i <- @integrations}
+    class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 mb-4"
+  >
+    <h3 class="font-semibold"><%= provider_name(i.provider) %> · <%= i.environment %></h3>
+    <p class="text-xs text-gray-500 mt-2">
+      Last successful sync: <%= timestamp(i.last_synced_at, @site) %>
+    </p>
+    <p :if={i.last_error} role="alert" class="text-sm text-red-600 mt-2"><%= i.last_error %></p>
+    <p class="text-sm mt-4">
+      Mapped products:
+      <span class="font-mono text-xs break-all"><%= Enum.join(i.product_ids, ", ") %></span>
+    </p>
+    <form action={path(@site, "/settings")} method="post" class="mt-5 space-y-3">
+      <input type="hidden" name="_csrf_token" value={csrf()} />
+      <input type="hidden" name="integration[provider]" value={i.provider} />
+      <input type="hidden" name="integration[environment]" value={i.environment} />
+      <label class="block text-sm font-medium">
+        Add product IDs <textarea
+          name="integration[product_ids]"
+          rows="2"
+          required
+          placeholder={if i.provider == "paddle", do: "pro_…", else: "prod_…"}
+          class="mt-2 w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-850 font-mono text-xs"
+        ></textarea>
+        <span class="block text-xs font-normal text-gray-500 mt-1">
+          Enter only the new IDs, separated by commas or new lines. Existing products are kept and duplicates are ignored. Your API key and webhook settings are preserved.
+        </span>
+      </label>
+      <button class="button" type="submit">Add products and sync</button>
+    </form>
+    <label class="block text-sm font-medium mt-5">
+      Webhook URL
+      <input
+        readonly
+        value={PlausibleWeb.Endpoint.url() <> "/api/payments/webhooks/" <> i.webhook_token}
+        class="mt-2 w-full rounded-md bg-gray-50 dark:bg-gray-850 border-gray-300 dark:border-gray-600 text-xs font-mono"
+        onclick="this.select()"
+      />
+    </label>
+    <p class="mt-3 text-xs text-gray-500">
+      Subscribe to <%= if i.provider == "paddle",
+        do:
+          "transaction.created, transaction.updated, transaction.completed, transaction.payment_failed, transaction.canceled, adjustment.created and adjustment.updated.",
+        else: "checkout.completed, subscription.paid, refund.created and dispute.created." %>
+    </p>
+  </section>
+  <h2 class="text-lg font-semibold mt-10 mb-4">Connect a provider or update credentials</h2>
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
     <section
       :for={provider <- ["paddle", "creem"]}
@@ -50,7 +100,7 @@
             class="mt-2 w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-850 font-mono text-xs"
           ></textarea>
           <span class="block text-xs font-normal text-gray-500 mt-1">
-            Comma-separated IDs from your product catalog. Required for a new connection. Only orders entirely belonging to these products are imported.
+            Comma-separated IDs from your product catalog. Required for a new connection; IDs added to an existing connection are merged with its saved products. Only orders entirely belonging to these products are imported.
           </span>
         </label>
         <label class="block text-sm font-medium">
@@ -87,37 +137,6 @@
     </section>
   </div>
 
-  <h2 class="text-lg font-semibold mt-10 mb-4">Connected accounts</h2>
-  <p :if={@integrations == []} class="text-sm text-gray-500">No payment connections yet.</p>
-  <section
-    :for={i <- @integrations}
-    class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 mb-4"
-  >
-    <h3 class="font-semibold"><%= provider_name(i.provider) %> · <%= i.environment %></h3>
-    <p class="text-xs text-gray-500 mt-2">
-      Last successful sync: <%= timestamp(i.last_synced_at, @site) %>
-    </p>
-    <p :if={i.last_error} role="alert" class="text-sm text-red-600 mt-2"><%= i.last_error %></p>
-    <p class="text-sm mt-4">
-      Mapped products:
-      <span class="font-mono text-xs break-all"><%= Enum.join(i.product_ids, ", ") %></span>
-    </p>
-    <label class="block text-sm font-medium mt-5">
-      Webhook URL
-      <input
-        readonly
-        value={PlausibleWeb.Endpoint.url() <> "/api/payments/webhooks/" <> i.webhook_token}
-        class="mt-2 w-full rounded-md bg-gray-50 dark:bg-gray-850 border-gray-300 dark:border-gray-600 text-xs font-mono"
-        onclick="this.select()"
-      />
-    </label>
-    <p class="mt-3 text-xs text-gray-500">
-      Subscribe to <%= if i.provider == "paddle",
-        do:
-          "transaction.created, transaction.updated, transaction.completed, transaction.payment_failed, transaction.canceled, adjustment.created and adjustment.updated.",
-        else: "checkout.completed, subscription.paid, refund.created and dispute.created." %>
-    </p>
-  </section>
   <div class="mt-8 text-sm text-gray-500 dark:text-gray-400 space-y-3 max-w-3xl">
     <p>
       Configure the webhook URL before saving this form. The endpoint becomes active after saving. If you reload before saving, use the new URL shown above.
@@ -126,7 +145,7 @@
       Saving starts a historical import. Automatic reconciliation runs every 30 minutes when background scheduling is enabled. You can also use Sync now.
     </p>
     <p>
-      Product mappings stay fixed after connection to protect historical attribution. To rotate credentials, select the same provider and environment above and enter only the new secrets.
+      To add products, use Add products and sync under the connected account. Existing products cannot be removed here. To rotate credentials, select the same provider and environment above and enter only the new secrets.
     </p>
   </div>
 </.frame>

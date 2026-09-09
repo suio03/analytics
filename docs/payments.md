@@ -12,7 +12,7 @@ The private `/:domain/transactions` page reads a PostgreSQL payment ledger. It i
 
 Paddle requires a Billing API key with transaction read access and permission to read the related customer, address and adjustment information. This does not reuse the application's Paddle Classic subscription credentials. Creem keys must match the selected environment.
 
-Each site can have one connection per provider/environment. Credentials can be rotated by resubmitting that provider/environment; blank secrets retain existing values. Product mappings are immutable in this initial version to avoid silently reassigning historical revenue. A mixed basket with products outside the mapping is excluded in full, not attributed in full to multiple sites.
+Each site can have one connection per provider/environment. Credentials can be rotated by resubmitting that provider/environment; blank secrets retain existing values. To add products, use **Add product IDs → Add products and sync** under the relevant connected account. Enter only the new IDs, separated by commas or new lines. Saving merges and deduplicates IDs, keeps the existing products, credentials and webhook URL, and queues a historical sync for the expanded mapping. Existing product IDs cannot be removed through this form. Additions are serialized with other saves and imports to avoid lost updates. A mixed basket with products outside the mapping is excluded in full, not attributed in full to multiple sites.
 
 ## Data and semantics
 

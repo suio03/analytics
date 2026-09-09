@@ -186,7 +186,7 @@ defmodule Plausible.PaymentsTest do
                "environment" => "live",
                "api_key" => "rotated",
                "webhook_secret" => "",
-               "product_ids" => "pro_other"
+               "product_ids" => ""
              })
 
     assert updated.api_key == "rotated"
@@ -202,5 +202,66 @@ defmodule Plausible.PaymentsTest do
                "webhook_secret" => "secret",
                "product_ids" => ""
              })
+  end
+
+  test "product additions merge IDs, retain secrets and queue a historical sync", %{
+    site: site,
+    integration: i
+  } do
+    Payments.store(i, attrs(), DateTime.utc_now())
+    new_order = %{attrs("txn_newproduct") | product_ids: ["pro_new"]}
+    Payments.store(i, new_order, DateTime.utc_now())
+    assert Repo.aggregate(Transaction, :count) == 1
+
+    assert {:ok, updated} =
+             Payments.save_integration(site.id, %{
+               "provider" => "paddle",
+               "environment" => "live",
+               "product_ids" => "pro_new, pro_scribix\npro_new",
+               "api_key" => "",
+               "webhook_secret" => "",
+               "webhook_token" => Ecto.UUID.generate()
+             })
+
+    assert updated.id == i.id
+    assert updated.product_ids == ["pro_scribix", "pro_new"]
+    assert updated.api_key == i.api_key
+    assert updated.webhook_secret == i.webhook_secret
+    assert updated.webhook_token == i.webhook_token
+    assert_enqueued(worker: Plausible.Workers.SyncPayments, args: %{integration_id: i.id})
+
+    assert {:ok, updated} =
+             Payments.save_integration(site.id, %{
+               "provider" => "paddle",
+               "environment" => "live",
+               "product_ids" => "pro_next, pro_new"
+             })
+
+    assert Repo.get!(Integration, i.id).product_ids == ["pro_scribix", "pro_new", "pro_next"]
+    Payments.store(updated, new_order, DateTime.utc_now())
+    Payments.store(updated, attrs(), DateTime.utc_now())
+    assert Repo.aggregate(Transaction, :count) == 2
+  end
+
+  test "invalid additions leave the mapping and credentials unchanged", %{
+    site: site,
+    integration: i
+  } do
+    for products <- ["invalid-id", Enum.map(1..100, &"pro_#{&1}")] do
+      assert {:error, changeset} =
+               Payments.save_integration(site.id, %{
+                 "provider" => "paddle",
+                 "environment" => "live",
+                 "api_key" => "should-not-be-saved",
+                 "product_ids" => products
+               })
+
+      assert Keyword.has_key?(changeset.errors, :product_ids)
+      saved = Repo.get!(Integration, i.id)
+      assert saved.product_ids == i.product_ids
+      assert saved.api_key == i.api_key
+    end
+
+    refute_enqueued(worker: Plausible.Workers.SyncPayments, args: %{integration_id: i.id})
   end
 end
