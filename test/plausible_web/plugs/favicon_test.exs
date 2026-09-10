@@ -203,15 +203,6 @@ defmodule PlausibleWeb.FaviconTest do
   describe "Fallback to placeholder icon" do
     @placholder_icon File.read!("priv/placeholder_favicon.ico")
 
-    setup do
-      stub(Plausible.HTTPClient.Mock, :get, fn url ->
-        assert URI.parse(url).host == "t1.gstatic.com"
-        {:error, %Mint.TransportError{reason: :closed}}
-      end)
-
-      :ok
-    end
-
     test "falls back to placeholder when DDG returns a non-2xx response", %{plug_opts: plug_opts} do
       expect(
         Plausible.HTTPClient.Mock,
@@ -221,6 +212,11 @@ defmodule PlausibleWeb.FaviconTest do
           {:error, Plausible.HTTPClient.Non200Error.new(res)}
         end
       )
+
+      expect(Plausible.HTTPClient.Mock, :get, fn url ->
+        assert URI.parse(url).host == "t1.gstatic.com"
+        {:error, %Mint.TransportError{reason: :closed}}
+      end)
 
       conn =
         conn(:get, "/favicon/sources/plausible.io")
@@ -240,6 +236,11 @@ defmodule PlausibleWeb.FaviconTest do
           {:error, %Mint.TransportError{reason: :closed}}
         end
       )
+
+      expect(Plausible.HTTPClient.Mock, :get, fn url ->
+        assert URI.parse(url).host == "t1.gstatic.com"
+        {:error, %Mint.TransportError{reason: :closed}}
+      end)
 
       conn =
         conn(:get, "/favicon/sources/plausible.io")
@@ -261,6 +262,11 @@ defmodule PlausibleWeb.FaviconTest do
           {:ok, %Finch.Response{status: 200, body: <<137, 80, 78, 71, 13, 10, 26, 10>>}}
         end
       )
+
+      expect(Plausible.HTTPClient.Mock, :get, fn url ->
+        assert URI.parse(url).host == "t1.gstatic.com"
+        {:error, %Mint.TransportError{reason: :closed}}
+      end)
 
       conn =
         conn(:get, "/favicon/sources/plausible.io")
