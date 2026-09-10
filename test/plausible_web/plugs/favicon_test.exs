@@ -144,8 +144,73 @@ defmodule PlausibleWeb.FaviconTest do
     assert Plug.Conn.get_resp_header(conn, "content-type") == ["image/svg+xml; charset=utf-8"]
   end
 
+  describe "Google fallback" do
+    for failure <- [:network, :non_200, :broken, :empty] do
+      @failure failure
+      test "uses Google after #{failure} from DuckDuckGo", %{plug_opts: plug_opts} do
+        response =
+          case @failure do
+            :network ->
+              {:error, %Mint.TransportError{reason: :closed}}
+
+            :non_200 ->
+              {:ok, %Finch.Response{status: 404, body: "not found"}}
+
+            :broken ->
+              {:ok, %Finch.Response{status: 200, body: <<137, 80, 78, 71, 13, 10, 26, 10>>}}
+
+            :empty ->
+              {:ok, %Finch.Response{status: 200, body: ""}}
+          end
+
+        expect(Plausible.HTTPClient.Mock, :get, fn
+          "https://icons.duckduckgo.com/ip3/plausible.io.ico" -> response
+        end)
+
+        expect(Plausible.HTTPClient.Mock, :get, fn url ->
+          uri = URI.parse(url)
+          assert uri.host == "t1.gstatic.com"
+          assert uri.path == "/faviconV2"
+          assert URI.decode_query(uri.query)["url"] == "https://plausible.io"
+
+          {:ok,
+           %Finch.Response{
+             status: 200,
+             body: "google icon",
+             headers: [{"content-type", "image/png"}, {"cache-control", "public, max-age=604800"}]
+           }}
+        end)
+
+        conn = conn(:get, "/favicon/sources/plausible.io?v=2") |> Favicon.call(plug_opts)
+
+        assert conn.resp_body == "google icon"
+        assert conn.halted
+        assert get_resp_header(conn, "content-type") == ["image/png"]
+        assert get_resp_header(conn, "cache-control") == ["public, max-age=604800"]
+        assert get_resp_header(conn, "content-security-policy") == ["script-src 'none'"]
+        assert get_resp_header(conn, "content-disposition") == ["attachment"]
+      end
+    end
+  end
+
+  test "serves explicit placeholder without fetching providers", %{plug_opts: plug_opts} do
+    conn = conn(:get, "/favicon/sources/placeholder?v=2") |> Favicon.call(plug_opts)
+
+    assert conn.resp_body == File.read!("priv/placeholder_favicon.ico")
+    assert get_resp_header(conn, "cache-control") == ["public, max-age=3600"]
+  end
+
   describe "Fallback to placeholder icon" do
     @placholder_icon File.read!("priv/placeholder_favicon.ico")
+
+    setup do
+      stub(Plausible.HTTPClient.Mock, :get, fn url ->
+        assert URI.parse(url).host == "t1.gstatic.com"
+        {:error, %Mint.TransportError{reason: :closed}}
+      end)
+
+      :ok
+    end
 
     test "falls back to placeholder when DDG returns a non-2xx response", %{plug_opts: plug_opts} do
       expect(
@@ -164,6 +229,7 @@ defmodule PlausibleWeb.FaviconTest do
       assert conn.halted
       assert conn.status == 200
       assert conn.resp_body == @placholder_icon
+      assert get_resp_header(conn, "cache-control") == ["public, max-age=3600"]
     end
 
     test "falls back to placeholder in case of a network error", %{plug_opts: plug_opts} do
@@ -182,6 +248,7 @@ defmodule PlausibleWeb.FaviconTest do
       assert conn.halted
       assert conn.status == 200
       assert conn.resp_body == @placholder_icon
+      assert get_resp_header(conn, "cache-control") == ["public, max-age=3600"]
     end
 
     test "falls back to placeholder when DDG returns a broken image response", %{
@@ -202,6 +269,7 @@ defmodule PlausibleWeb.FaviconTest do
       assert conn.halted
       assert conn.status == 200
       assert conn.resp_body == @placholder_icon
+      assert get_resp_header(conn, "cache-control") == ["public, max-age=3600"]
     end
   end
 end

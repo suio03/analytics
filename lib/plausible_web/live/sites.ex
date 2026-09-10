@@ -168,11 +168,7 @@ defmodule PlausibleWeb.Live.Sites do
     >
       <div class="col-span-1 bg-white dark:bg-gray-800 rounded-lg shadow p-4 group-hover:shadow-lg cursor-pointer">
         <div class="w-full flex items-center justify-between space-x-4">
-          <img
-            src={"/favicon/sources/#{@site.domain}"}
-            onerror="this.onerror=null; this.src='/favicon/sources/placeholder';"
-            class="w-4 h-4 flex-shrink-0 mt-px"
-          />
+          <.favicon domain={@site.domain} />
           <div class="flex-1 truncate -mt-px">
             <h3 class="text-gray-900 font-medium text-lg truncate dark:text-gray-100">
               <%= @site.domain %>
@@ -546,11 +542,18 @@ defmodule PlausibleWeb.Live.Sites do
   end
 
   def favicon(assigns) do
-    src = "/favicon/sources/#{assigns.domain}"
+    src = "/favicon/sources/#{URI.encode_www_form(assigns.domain)}?v=2"
     assigns = assign(assigns, :src, src)
 
     ~H"""
-    <img src={@src} class="w-4 h-4 flex-shrink-0 mt-px" />
+    <span class="w-4 h-4 flex-shrink-0 mt-px rounded bg-gray-100 inline-flex items-center justify-center">
+      <img
+        src={@src}
+        alt=""
+        onerror="this.onerror=null; this.src='/favicon/sources/placeholder?v=2';"
+        class="w-4 h-4 rounded object-contain"
+      />
+    </span>
     """
   end
 
