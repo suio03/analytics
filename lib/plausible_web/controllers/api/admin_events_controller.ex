@@ -20,7 +20,14 @@ defmodule PlausibleWeb.Api.AdminEventsController do
   def properties(conn, params) do
     case get_site(conn, params) do
       {:ok, site} ->
-        json(conn, %{site_id: site.domain, properties: site.allowed_event_props || []})
+        result = %{site_id: site.domain, properties: site.allowed_event_props || []}
+
+        result =
+          if params["discover"] == "true",
+            do: Map.put(result, :discovered, Plausible.Props.suggest_keys_to_allow(site)),
+            else: result
+
+        json(conn, result)
 
       error ->
         respond_error(conn, error)

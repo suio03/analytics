@@ -64,6 +64,15 @@ class PropertiesTests(unittest.TestCase):
         self.assertEqual(output.getvalue(), "")
         self.assertIn("HTTP 404", errors.getvalue())
 
+    def test_discovery_is_read_only(self):
+        with patch.object(admin.urllib.request, "urlopen", return_value=io.BytesIO(b'{"discovered":["stage"]}')) as op:
+            result = admin.Client("https://analytics.test", "test-key").properties("pixfy.io", discover=True)
+        self.assertEqual(result["discovered"], ["stage"])
+        request = op.call_args.args[0]
+        self.assertEqual(request.method, "GET")
+        self.assertIn("discover=true", request.full_url)
+        self.assertEqual(request.get_header("User-agent"), "PlausibleAdmin/1.0")
+
     def test_existing_event_commands_still_parse(self):
         args = admin.build_parser().parse_args(["events", "add", "pixfy.io", "Signup"])
         self.assertEqual((args.command, args.event_command, args.names), ("events", "add", ["Signup"]))

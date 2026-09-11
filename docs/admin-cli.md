@@ -56,3 +56,8 @@ trimming. Property removal and replacement are deliberately not part of this com
 
 CLI regression tests: `python3 -m unittest discover -s test/cli -p 'test_*.py'`.
 API tests: `MIX_ENV=ce_test mix test test/plausible_web/controllers/api/admin_events_controller_test.exs`.
+
+Use `bin/plausible-admin properties discover pixfy.io` to list unconfigured property
+keys recorded during the past six months (up to 300). Review these names and pass
+them together to `properties add`. Discovery does not change settings.
+The CLI identifies itself as `PlausibleAdmin/1.0` for proxies and access logs.

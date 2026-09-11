@@ -27,6 +27,7 @@ class Client:
         body = None
         headers = {
             "Accept": "application/json",
+            "User-Agent": "PlausibleAdmin/1.0",
             "Authorization": "Bearer " + self.api_key,
         }
         if payload is not None:
@@ -58,8 +59,11 @@ class Client:
     def events(self, site):
         return self.request("GET", "/api/v1/admin/events", query={"site_id": site})
 
-    def properties(self, site):
-        return self.request("GET", "/api/v1/admin/properties", query={"site_id": site})
+    def properties(self, site, discover=False):
+        query = {"site_id": site}
+        if discover:
+            query["discover"] = "true"
+        return self.request("GET", "/api/v1/admin/properties", query=query)
 
     def add_properties(self, site, properties):
         return self.request(
@@ -132,6 +136,8 @@ def build_parser():
     property_commands = properties.add_subparsers(dest="property_command", required=True)
     property_list = property_commands.add_parser("list", help="List configured property names")
     property_list.add_argument("site")
+    property_discover = property_commands.add_parser("discover", help="List unconfigured keys recorded in the past six months")
+    property_discover.add_argument("site")
     property_add = property_commands.add_parser("add", help="Add property names in one request")
     property_add.add_argument("site")
     property_add.add_argument("names", nargs="+")
@@ -180,12 +186,12 @@ def main():
 
         if args.command == "properties":
             result = (
-                client.properties(args.site) if args.property_command == "list"
+                client.properties(args.site, discover=args.property_command == "discover") if args.property_command in ("list", "discover")
                 else client.add_properties(args.site, args.names)
             )
             if "added" in result:
                 print("Added: {}".format(", ".join(result["added"]) or "none"))
-            for name in result["properties"]:
+            for name in result["discovered"] if args.property_command == "discover" else result["properties"]:
                 print(name)
             return 0
 
