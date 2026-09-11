@@ -17,6 +17,54 @@ defmodule PlausibleWeb.Api.AdminEventsController do
     json(conn, %{sites: sites})
   end
 
+  def properties(conn, params) do
+    case get_site(conn, params) do
+      {:ok, site} ->
+        json(conn, %{site_id: site.domain, properties: site.allowed_event_props || []})
+
+      error ->
+        respond_error(conn, error)
+    end
+  end
+
+  def add_properties(conn, params) do
+    with {:ok, site} <- get_site(conn, params),
+         {:ok, properties} <- fetch_properties(params),
+         {:ok, result} <-
+           Repo.transaction(fn ->
+             # Serialize additive updates so concurrent clients preserve each other's properties.
+             site =
+               Repo.one!(from s in Plausible.Site, where: s.id == ^site.id, lock: "FOR UPDATE")
+
+             previous = site.allowed_event_props || []
+
+             case Plausible.Props.allow(site, properties) do
+               {:ok, updated} ->
+                 %{
+                   site_id: updated.domain,
+                   properties: updated.allowed_event_props,
+                   added: updated.allowed_event_props -- previous
+                 }
+
+               {:error, reason} ->
+                 Repo.rollback(reason)
+             end
+           end) do
+      json(conn, result)
+    else
+      error -> respond_error(conn, error)
+    end
+  end
+
+  defp fetch_properties(%{"properties" => properties}) when is_list(properties) do
+    if length(properties) <= Plausible.Props.max_props() and
+         Enum.all?(properties, &is_binary/1),
+       do: {:ok, properties},
+       else: {:error, :invalid_properties}
+  end
+
+  defp fetch_properties(_params), do: {:error, :invalid_properties}
+
   def index(conn, params) do
     case get_site(conn, params) do
       {:ok, site} ->
@@ -109,6 +157,20 @@ defmodule PlausibleWeb.Api.AdminEventsController do
 
     H.bad_request(conn, message)
   end
+
+  defp respond_error(conn, {:error, :invalid_properties}),
+    do: H.bad_request(conn, "Parameter `properties` must be an array of at most 300 strings")
+
+  defp respond_error(conn, {:error, :upgrade_required}),
+    do:
+      conn |> put_status(402) |> json(%{error: "Custom Properties is not available on this plan"})
+
+  defp respond_error(conn, {:error, %Ecto.Changeset{}}),
+    do:
+      H.bad_request(
+        conn,
+        "Property names must be 1–300 characters; at most 300 properties per site"
+      )
 
   defp respond_error(conn, {:error, :not_found}), do: H.not_found(conn, "Event goal not found")
   defp respond_error(conn, _error), do: H.bad_request(conn, "Unable to update event goals")

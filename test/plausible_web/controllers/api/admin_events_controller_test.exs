@@ -141,4 +141,92 @@ defmodule PlausibleWeb.Api.AdminEventsControllerTest do
       assert %{"events" => []} = json_response(conn, 200)
     end
   end
+
+  describe "custom properties" do
+    setup :create_site
+
+    test "batch add preserves existing properties and is idempotent", %{conn: conn, site: site} do
+      site
+      |> Ecto.Changeset.change(allowed_event_props: ["tool_slug"])
+      |> Plausible.Repo.update!()
+
+      params = %{site_id: site.domain, properties: [" outcome ", "stage", "outcome"]}
+      response = post(conn, "/api/v1/admin/properties", params)
+
+      assert %{"properties" => ["outcome", "stage", "tool_slug"], "added" => ["outcome", "stage"]} =
+               json_response(response, 200)
+
+      response = post(recycle(conn), "/api/v1/admin/properties", params)
+      assert %{"added" => []} = json_response(response, 200)
+
+      response = get(recycle(conn), "/api/v1/admin/properties", %{site_id: site.domain})
+      assert %{"properties" => ["outcome", "stage", "tool_slug"]} = json_response(response, 200)
+    end
+
+    test "invalid batches are atomic", %{conn: conn, site: site} do
+      site
+      |> Ecto.Changeset.change(allowed_event_props: ["tool_slug"])
+      |> Plausible.Repo.update!()
+
+      for properties <- [
+            nil,
+            "stage",
+            [1],
+            ["stage", " "],
+            [String.duplicate("x", 301)],
+            Enum.map(1..301, &"prop_#{&1}")
+          ] do
+        response =
+          post(recycle(conn), "/api/v1/admin/properties", %{
+            site_id: site.domain,
+            properties: properties
+          })
+
+        assert %{"error" => _} = json_response(response, 400)
+        assert Plausible.Repo.reload(site).allowed_event_props == ["tool_slug"]
+      end
+    end
+
+    test "combined property limit leaves settings unchanged", %{conn: conn, site: site} do
+      existing = Enum.map(1..300, &"prop_#{&1}")
+      site |> Ecto.Changeset.change(allowed_event_props: existing) |> Plausible.Repo.update!()
+
+      response =
+        post(conn, "/api/v1/admin/properties", %{site_id: site.domain, properties: ["stage"]})
+
+      assert %{"error" => _} = json_response(response, 400)
+      assert Plausible.Repo.reload(site).allowed_event_props == existing
+    end
+
+    test "requires authentication and editable site membership", %{
+      conn: conn,
+      user: user,
+      site: site
+    } do
+      unauthenticated = conn |> delete_req_header("authorization")
+
+      assert unauthenticated
+             |> get("/api/v1/admin/properties", %{site_id: site.domain})
+             |> json_response(401)
+
+      assert unauthenticated
+             |> post("/api/v1/admin/properties", %{site_id: site.domain, properties: ["stage"]})
+             |> json_response(401)
+
+      membership =
+        Plausible.Repo.get_by!(Plausible.Site.Membership, user_id: user.id, site_id: site.id)
+
+      membership |> Ecto.Changeset.change(role: :viewer) |> Plausible.Repo.update!()
+
+      response =
+        post(recycle(conn), "/api/v1/admin/properties", %{
+          site_id: site.domain,
+          properties: ["stage"]
+        })
+
+      assert %{"error" => _} = json_response(response, 404)
+      response = get(recycle(conn), "/api/v1/admin/properties", %{site_id: site.domain})
+      assert %{"error" => _} = json_response(response, 404)
+    end
+  end
 end

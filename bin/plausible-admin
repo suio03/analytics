@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Manage custom event goals on a self-hosted Plausible instance."""
+"""Manage event goals and dashboard custom properties on a self-hosted Plausible instance."""
 
 import argparse
 import json
@@ -57,6 +57,15 @@ class Client:
 
     def events(self, site):
         return self.request("GET", "/api/v1/admin/events", query={"site_id": site})
+
+    def properties(self, site):
+        return self.request("GET", "/api/v1/admin/properties", query={"site_id": site})
+
+    def add_properties(self, site, properties):
+        return self.request(
+            "POST", "/api/v1/admin/properties",
+            {"site_id": site, "properties": properties},
+        )
 
     def add(self, site, events):
         return self.request(
@@ -117,6 +126,16 @@ def build_parser():
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("sites", help="List sites available to the API key")
 
+    properties = commands.add_parser(
+        "properties", help="Manage dashboard Custom Properties (does not send analytics events)"
+    )
+    property_commands = properties.add_subparsers(dest="property_command", required=True)
+    property_list = property_commands.add_parser("list", help="List configured property names")
+    property_list.add_argument("site")
+    property_add = property_commands.add_parser("add", help="Add property names in one request")
+    property_add.add_argument("site")
+    property_add.add_argument("names", nargs="+")
+
     events = commands.add_parser("events", help="Manage custom event goals")
     event_commands = events.add_subparsers(dest="event_command", required=True)
 
@@ -157,6 +176,17 @@ def main():
     try:
         if args.command == "sites":
             print_sites(client.sites())
+            return 0
+
+        if args.command == "properties":
+            result = (
+                client.properties(args.site) if args.property_command == "list"
+                else client.add_properties(args.site, args.names)
+            )
+            if "added" in result:
+                print("Added: {}".format(", ".join(result["added"]) or "none"))
+            for name in result["properties"]:
+                print(name)
             return 0
 
         if args.event_command == "list":

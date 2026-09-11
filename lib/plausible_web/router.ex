@@ -223,6 +223,8 @@ defmodule PlausibleWeb.Router do
     pipe_through [:public_api, PlausibleWeb.Plugs.AuthorizePublicAPI]
 
     get "/sites", AdminEventsController, :sites
+    get "/properties", AdminEventsController, :properties
+    post "/properties", AdminEventsController, :add_properties
     get "/events", AdminEventsController, :index
     post "/events", AdminEventsController, :create
     put "/events", AdminEventsController, :sync

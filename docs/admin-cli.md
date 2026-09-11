@@ -28,3 +28,31 @@ bin/plausible-admin events sync example.com events.json --prune
 ```
 
 Pruning never removes pageview goals. Requests are authorized with the API key's account membership; viewers cannot change goals.
+
+## Dashboard Custom Properties
+
+List configured properties or add several names in one API request:
+
+```sh
+bin/plausible-admin properties list pixfy.io
+bin/plausible-admin properties add pixfy.io outcome stage error_category
+```
+
+This enables property names in dashboard settings. It does **not** send analytics
+events or property values. Existing recorded values remain available; no event
+replay is required. Adds preserve existing properties, trim names and ignore
+duplicates, so re-running the command is safe. The output includes newly added
+names and the complete configured list. Owners and admins may use these commands;
+viewer keys cannot access them.
+
+The server must include the new authenticated routes before using these commands:
+`GET /api/v1/admin/properties?site_id=...` and
+`POST /api/v1/admin/properties` with
+`{"site_id":"pixfy.io","properties":["outcome","stage","error_category"]}`.
+The same account API key and URL used for event goals are used for properties.
+The add request is atomic; invalid names or exceeding the 300-property site limit
+leave existing settings unchanged. Each name must contain 1–300 characters after
+trimming. Property removal and replacement are deliberately not part of this command.
+
+CLI regression tests: `python3 -m unittest discover -s test/cli -p 'test_*.py'`.
+API tests: `MIX_ENV=ce_test mix test test/plausible_web/controllers/api/admin_events_controller_test.exs`.
