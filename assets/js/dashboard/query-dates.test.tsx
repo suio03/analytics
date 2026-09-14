@@ -95,7 +95,11 @@ test.each([
 
 test.each([
   [
-    { period: 'custom', from: '2024-08-10', to: '2024-08-20' },
+    {
+      period: 'custom',
+      from: `${new Date().getFullYear()}-08-10`,
+      to: `${new Date().getFullYear()}-08-20`
+    },
     '10 Aug - 20 Aug'
   ],
   [{ period: 'realtime' }, 'Realtime']

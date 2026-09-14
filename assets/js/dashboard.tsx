@@ -8,7 +8,6 @@ import { RouterProvider } from 'react-router-dom'
 import { createAppRouter } from './dashboard/router'
 import ErrorBoundary from './dashboard/error/error-boundary'
 import * as api from './dashboard/api'
-import * as timer from './dashboard/util/realtime-update-timer'
 import { filtersBackwardsCompatibilityRedirect } from './dashboard/query'
 import SiteContextProvider, {
   parseSiteFromDataset
@@ -20,8 +19,6 @@ import {
   GoToSites,
   SomethingWentWrongMessage
 } from './dashboard/error/something-went-wrong'
-
-timer.start()
 
 const container = document.getElementById('stats-react-container')
 

@@ -31,7 +31,8 @@ import LastLoadContextProvider from './last-load-context'
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      refetchOnWindowFocus: false
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false
     }
   }
 })

@@ -7,16 +7,23 @@ import { Cog8ToothIcon, ChevronDownIcon } from '@heroicons/react/20/solid'
 
 function Favicon({ domain, className }) {
   return (
-    <img
-      alt=""
-      src={`/favicon/sources/${encodeURIComponent(domain)}`}
-      onError={(e) => {
-        e.target.onerror = null
-        e.target.src = '/favicon/sources/placeholder'
-      }}
-      referrerPolicy="no-referrer"
-      className={className}
-    />
+    <span
+      className={`inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded bg-gray-100 ${className}`}
+    >
+      <img
+        alt=""
+        src={`/favicon/sources/${encodeURIComponent(domain)}?v=2`}
+        onError={(e) => {
+          if (
+            !e.currentTarget.src.endsWith('/favicon/sources/placeholder?v=2')
+          ) {
+            e.currentTarget.src = '/favicon/sources/placeholder?v=2'
+          }
+        }}
+        referrerPolicy="no-referrer"
+        className="h-4 w-4 rounded object-contain"
+      />
+    </span>
   )
 }
 
@@ -145,10 +152,7 @@ export default class SiteSwitcher extends React.Component {
         className={`flex items-center justify-between truncate px-4 py-2 md:text-sm leading-5 text-gray-700 dark:text-gray-300 ${extraClass}`}
       >
         <span>
-          <Favicon
-            domain={domain}
-            className="inline w-4 mr-2 align-middle"
-          ></Favicon>
+          <Favicon domain={domain} className="mr-2 align-middle"></Favicon>
           <span className="truncate inline-block align-middle max-w-3xs pr-2">
             {domain}
           </span>
@@ -241,7 +245,7 @@ export default class SiteSwitcher extends React.Component {
         >
           <Favicon
             domain={this.props.site.domain}
-            className="w-4 mr-1 md:mr-2 align-middle w-4 mr-2 align-middle"
+            className="mr-1 md:mr-2 align-middle"
           ></Favicon>
           <span className="hidden sm:inline-block">
             {this.props.site.domain}
