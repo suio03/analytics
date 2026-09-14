@@ -40,8 +40,10 @@ postgres-stop: ## Stop and remove the postgres container
 browserless:
 	docker run -e "TOKEN=dummy_token" -p 3000:3000 --network host ghcr.io/browserless/chromium
 
-minio: ## Start a transient container with a recent version of minio (s3)
-	docker run -d --rm -p 10000:10000 -p 10001:10001 --name plausible_minio minio/minio server /data --address ":10000" --console-address ":10001"
+MINIO_IMAGE ?= quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+
+minio: ## Start a transient container with a pinned version of minio (s3)
+	docker run -d --rm -p 10000:10000 -p 10001:10001 --name plausible_minio $(MINIO_IMAGE) server /data --address ":10000" --console-address ":10001"
 	while ! docker exec plausible_minio mc alias set local http://localhost:10000 minioadmin minioadmin; do sleep 1; done
 	docker exec plausible_minio sh -c 'mc mb local/dev-exports && mc ilm add --expiry-days 7 local/dev-exports'
 	docker exec plausible_minio sh -c 'mc mb local/dev-imports && mc ilm add --expiry-days 7 local/dev-imports'
