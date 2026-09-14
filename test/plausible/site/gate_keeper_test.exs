@@ -6,7 +6,7 @@ defmodule Plausible.Site.GateKeeperTest do
 
   setup %{test: test} do
     {:ok, _} = start_test_cache(test)
-    opts = [cache_opts: [cache_name: test, force?: true]]
+    opts = [cache_opts: [cache_name: test, force?: true], key: "gatekeeper-test:#{test}"]
     {:ok, %{opts: opts}}
   end
 
@@ -67,8 +67,8 @@ defmodule Plausible.Site.GateKeeperTest do
     assert {:allow, %Plausible.Site{id: ^site_id, from_cache?: true}} =
              GateKeeper.check(domain, opts)
 
-    Process.sleep(1)
-    assert {:deny, :throttle} = GateKeeper.check(domain, opts)
+    # The fixed window can roll over between consecutive checks. The threshold
+    # test covers throttling; this test checks that a new window allows traffic.
     Process.sleep(1_000)
 
     assert {:allow, %Plausible.Site{id: ^site_id, from_cache?: true}} =
