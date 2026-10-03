@@ -72,6 +72,15 @@ defmodule PlausibleWeb.Api.AdminEventsController do
 
   defp fetch_properties(_params), do: {:error, :invalid_properties}
 
+  def paths(conn, params) do
+    with {:ok, site} <- get_site(conn, params),
+         {:ok, result} <- Plausible.Paths.query(site, params) do
+      json(conn, result)
+    else
+      error -> respond_error(conn, error)
+    end
+  end
+
   def index(conn, params) do
     case get_site(conn, params) do
       {:ok, site} ->
@@ -178,6 +187,35 @@ defmodule PlausibleWeb.Api.AdminEventsController do
         conn,
         "Property names must be 1–300 characters; at most 300 properties per site"
       )
+
+  defp respond_error(conn, {:error, :invalid_mode}),
+    do: H.bad_request(conn, "Parameter `mode` must be one of: top, sessions, next, prev")
+
+  defp respond_error(conn, {:error, :invalid_date}),
+    do: H.bad_request(conn, "Parameters `from` and `to` must be ISO 8601 dates")
+
+  defp respond_error(conn, {:error, :invalid_range}),
+    do: H.bad_request(conn, "Parameter `from` must not be after `to`")
+
+  defp respond_error(conn, {:error, :range_too_long}),
+    do: H.bad_request(conn, "Date range can cover at most 90 days")
+
+  defp respond_error(conn, {:error, :invalid_limit}),
+    do: H.bad_request(conn, "Parameter `limit` must be an integer between 1 and 500")
+
+  defp respond_error(conn, {:error, {:invalid_list, key}}),
+    do:
+      H.bad_request(conn, "Parameter `#{key}` must be a comma-separated list of at most 50 names")
+
+  defp respond_error(conn, {:error, :sensitive_prop}),
+    do:
+      H.bad_request(
+        conn,
+        "Parameter `props` cannot include identifier, URL, name or free-text properties"
+      )
+
+  defp respond_error(conn, {:error, :missing_step}),
+    do: H.bad_request(conn, "Parameter `step` is required for next and prev modes")
 
   defp respond_error(conn, {:error, :not_found}), do: H.not_found(conn, "Event goal not found")
   defp respond_error(conn, _error), do: H.bad_request(conn, "Unable to update event goals")

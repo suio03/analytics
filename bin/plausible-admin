@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Manage event goals and dashboard custom properties on a self-hosted Plausible instance."""
+"""Manage event goals and custom properties, and read visit paths, on a self-hosted Plausible instance."""
 
 import argparse
 import json
@@ -71,6 +71,15 @@ class Client:
             {"site_id": site, "properties": properties},
         )
 
+    def paths(self, site, mode="top", step=None, date_from=None, date_to=None,
+              contains=None, props=None, limit=None):
+        query = {"site_id": site, "mode": mode}
+        optional = {"step": step, "from": date_from, "to": date_to,
+                    "contains": ",".join(contains or []), "props": ",".join(props or []),
+                    "limit": limit}
+        query.update({key: value for key, value in optional.items() if value})
+        return self.request("GET", "/api/v1/admin/paths", query=query)
+
     def add(self, site, events):
         return self.request(
             "POST", "/api/v1/admin/events", {"site_id": site, "events": events}
@@ -116,6 +125,27 @@ def print_events(result):
         print("{}\t{}".format(event["id"], event["event_name"]))
 
 
+def print_paths(result):
+    print("# {} {} {}..{}: {} visits{}".format(
+        result["site_id"], result["mode"], result["from"], result["to"],
+        result["sessions_matched"], " (truncated)" if result["truncated"] else ""))
+    if result["mode"] == "top":
+        for row in result["paths"]:
+            print("{}\t{}".format(row["sessions"], " > ".join(row["path"])))
+    elif result["mode"] == "sessions":
+        for row in result["sessions"]:
+            steps = " > ".join("{}@{}s".format(label, offset) for label, offset in row["steps"])
+            print("{}\t{}\t{}\t{}".format(row["date"], row["source"], row["device"], steps))
+    else:
+        print("# step {}: {} occurrences".format(result["step"], result["occurrences"]))
+        for row in result["steps"]:
+            print("{}\t{:.1%}\t{}".format(row["count"], row["share"], row["step"]))
+
+
+def comma_list(value):
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
 def build_parser():
     parser = argparse.ArgumentParser(prog="plausible-admin")
     parser.add_argument(
@@ -141,6 +171,17 @@ def build_parser():
     property_add = property_commands.add_parser("add", help="Add property names in one request")
     property_add.add_argument("site")
     property_add.add_argument("names", nargs="+")
+
+    paths = commands.add_parser("paths", help="Read anonymized per-visit paths (read-only)")
+    paths.add_argument("site")
+    paths.add_argument("--mode", choices=["top", "sessions", "next", "prev"], default="top")
+    paths.add_argument("--step", help="Event name or page path for next/prev mode")
+    paths.add_argument("--from", dest="date_from", help="Start date (YYYY-MM-DD), default 30 days")
+    paths.add_argument("--to", dest="date_to", help="End date (YYYY-MM-DD), default today")
+    paths.add_argument("--contains", type=comma_list, help="Only visits with any of these events")
+    paths.add_argument("--props", type=comma_list, help="Enum-like props to append to event steps")
+    paths.add_argument("--limit", type=int)
+    paths.add_argument("--json", action="store_true", help="Print the raw JSON response")
 
     events = commands.add_parser("events", help="Manage custom event goals")
     event_commands = events.add_subparsers(dest="event_command", required=True)
@@ -182,6 +223,17 @@ def main():
     try:
         if args.command == "sites":
             print_sites(client.sites())
+            return 0
+
+        if args.command == "paths":
+            if args.mode in ("next", "prev") and not args.step:
+                parser.error("--step is required for next and prev modes")
+            result = client.paths(args.site, args.mode, args.step, args.date_from, args.date_to,
+                                  args.contains, args.props, args.limit)
+            if args.json:
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+            else:
+                print_paths(result)
             return 0
 
         if args.command == "properties":

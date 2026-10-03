@@ -61,3 +61,34 @@ Use `bin/plausible-admin properties discover pixfy.io` to list unconfigured prop
 keys recorded during the past six months (up to 300). Review these names and pass
 them together to `properties add`. Discovery does not change settings.
 The CLI identifies itself as `PlausibleAdmin/1.0` for proxies and access logs.
+
+## Visit paths (read-only)
+
+`paths` reconstructs anonymized per-visit event sequences from ClickHouse, for
+questions the Stats API cannot answer (what visitors did before or after a step):
+
+```sh
+bin/plausible-admin paths scribix.io                                   # most common paths, last 30 days
+bin/plausible-admin paths scribix.io --mode sessions --contains checkout_click,upgrade_cta_shown --props reason,tier
+bin/plausible-admin paths scribix.io --mode next --step transcribe_success
+bin/plausible-admin paths scribix.io --mode prev --step /pricing --from 2026-09-01 --to 2026-09-30 --json
+```
+
+The route is `GET /api/v1/admin/paths?site_id=...&mode=top|sessions|next|prev`
+with optional `from`, `to` (site-timezone dates, at most 90 days), `contains`
+(visits with any of these events), `props`, `step` (required for next/prev; an
+event name or a page path) and `limit` (1–500, default 50). Owners and admins
+only; it never writes data.
+
+Each step is a normalized page path or an event name. Locale prefixes are
+dropped (`/ja/pricing` → `/pricing`), UUIDs, numbers and long tokens become
+`:id`, query strings are removed and consecutive repeats collapse. Event props
+are appended only when requested and only for short enum-like values
+(`upgrade_cta_shown(reason=quota)`); identifier, URL, name, message and other
+free-text keys are rejected. Responses contain dates, source, device class and
+step offsets in seconds, never session or visitor IDs. In next/prev mode a bare
+event name also matches its labels with props.
+
+Limits: 30 steps per visit and 500,000 scanned events (`truncated: true` when
+reached). Visits cannot be linked across days because visitor hashes rotate
+daily.

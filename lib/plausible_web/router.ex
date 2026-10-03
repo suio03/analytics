@@ -225,6 +225,7 @@ defmodule PlausibleWeb.Router do
     get "/sites", AdminEventsController, :sites
     get "/properties", AdminEventsController, :properties
     post "/properties", AdminEventsController, :add_properties
+    get "/paths", AdminEventsController, :paths
     get "/events", AdminEventsController, :index
     post "/events", AdminEventsController, :create
     put "/events", AdminEventsController, :sync

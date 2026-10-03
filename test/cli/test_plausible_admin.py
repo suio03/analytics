@@ -78,5 +78,45 @@ class PropertiesTests(unittest.TestCase):
         self.assertEqual((args.command, args.event_command, args.names), ("events", "add", ["Signup"]))
 
 
+
+class PathsTests(unittest.TestCase):
+    def test_paths_is_a_read_only_get_with_encoded_filters(self):
+        body = b'{"site_id":"scribix.io","mode":"next","from":"2026-09-01","to":"2026-09-30","sessions_matched":0,"truncated":false,"step":"transcribe_success","occurrences":0,"steps":[]}'
+        with patch.object(admin.urllib.request, "urlopen", return_value=io.BytesIO(body)) as op:
+            admin.Client("https://analytics.test", "test-key").paths(
+                "scribix.io", "next", "transcribe_success", "2026-09-01", None,
+                ["checkout_click", "upgrade_cta_shown"], ["reason"], 20)
+        request = op.call_args.args[0]
+        self.assertEqual(request.method, "GET")
+        self.assertIsNone(request.data)
+        query = admin.urllib.parse.parse_qs(admin.urllib.parse.urlparse(request.full_url).query)
+        self.assertEqual(query, {
+            "site_id": ["scribix.io"], "mode": ["next"], "step": ["transcribe_success"],
+            "from": ["2026-09-01"], "contains": ["checkout_click,upgrade_cta_shown"],
+            "props": ["reason"], "limit": ["20"],
+        })
+
+    def test_cli_prints_top_paths(self):
+        args = ["plausible-admin", "--url", "https://analytics.test", "--api-key", "test-key",
+                "paths", "scribix.io", "--contains", "checkout_click, upgrade_cta_shown"]
+        result = {"site_id": "scribix.io", "mode": "top", "from": "2026-09-01", "to": "2026-09-30",
+                  "sessions_matched": 3, "truncated": False,
+                  "paths": [{"path": ["/", "transcribe_success", "/pricing"], "sessions": 2}]}
+        output = io.StringIO()
+        with patch("sys.argv", args), patch.object(admin.Client, "paths", return_value=result) as paths, \
+                contextlib.redirect_stdout(output):
+            self.assertEqual(admin.main(), 0)
+        paths.assert_called_once_with("scribix.io", "top", None, None, None,
+                                      ["checkout_click", "upgrade_cta_shown"], None, None)
+        self.assertIn("2\t/ > transcribe_success > /pricing", output.getvalue())
+
+    def test_next_mode_requires_step(self):
+        args = ["plausible-admin", "--url", "https://analytics.test", "--api-key", "test-key",
+                "paths", "scribix.io", "--mode", "next"]
+        with patch("sys.argv", args), contextlib.redirect_stderr(io.StringIO()), \
+                self.assertRaises(SystemExit):
+            admin.main()
+
+
 if __name__ == "__main__":
     unittest.main()

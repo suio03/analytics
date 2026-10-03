@@ -229,4 +229,167 @@ defmodule PlausibleWeb.Api.AdminEventsControllerTest do
       assert %{"error" => _} = json_response(response, 404)
     end
   end
+
+  describe "paths" do
+    setup %{user: user} do
+      site = insert(:site, domain: "paths.example", timezone: "Etc/UTC", members: [user])
+      {:ok, site: site}
+    end
+
+    defp visit(site, started_at, steps) do
+      session_id = System.unique_integer([:positive])
+
+      steps
+      |> Enum.map(fn {offset, attrs} ->
+        build(
+          :event,
+          Keyword.merge(
+            [
+              name: "pageview",
+              session_id: session_id,
+              user_id: session_id,
+              timestamp: NaiveDateTime.add(started_at, offset),
+              referrer_source: "Google",
+              screen_size: "Desktop"
+            ],
+            attrs
+          )
+        )
+      end)
+      |> then(&populate_stats(site, &1))
+    end
+
+    setup %{site: site} do
+      day = ~N[2026-09-10 08:00:00]
+
+      visit(site, day, [
+        {0, pathname: "/ja"},
+        {5, pathname: "/ja"},
+        {10, name: "transcribe_success", pathname: "/ja"},
+        {40, pathname: "/pricing"},
+        {50,
+         name: "checkout_click",
+         pathname: "/pricing",
+         "meta.key": ["tier", "transaction_id"],
+         "meta.value": ["pro", "txn_01abc"]}
+      ])
+
+      visit(site, NaiveDateTime.add(day, 3600), [
+        {0, pathname: "/"},
+        {20, name: "transcribe_success", pathname: "/"},
+        {30, pathname: "/dashboard/transcripts/cfbec2a4-4a01-4a4d-82f9-731d6ead8739"}
+      ])
+
+      visit(site, NaiveDateTime.add(day, 7200), [{0, pathname: "/"}])
+      visit(site, ~N[2026-08-01 08:00:00], [{0, pathname: "/old"}])
+
+      other = insert(:site, members: [])
+      visit(other, day, [{0, pathname: "/other-site"}])
+      :ok
+    end
+
+    @range %{from: "2026-09-01", to: "2026-09-30"}
+
+    test "top mode groups normalized visits within the range", %{conn: conn, site: site} do
+      conn = get(conn, "/api/v1/admin/paths", Map.put(@range, :site_id, site.domain))
+
+      assert %{
+               "mode" => "top",
+               "sessions_matched" => 3,
+               "truncated" => false,
+               "paths" => [
+                 %{"path" => ["/"], "sessions" => 1},
+                 %{
+                   "path" => ["/", "transcribe_success", "/dashboard/transcripts/:id"],
+                   "sessions" => 1
+                 },
+                 %{
+                   "path" => ["/", "transcribe_success", "/pricing", "checkout_click"],
+                   "sessions" => 1
+                 }
+               ]
+             } = json_response(conn, 200)
+    end
+
+    test "sessions mode filters by contained events and hides identifiers", %{
+      conn: conn,
+      site: site
+    } do
+      params =
+        Map.merge(@range, %{
+          site_id: site.domain,
+          mode: "sessions",
+          contains: "checkout_click",
+          props: "tier,transaction"
+        })
+
+      response = conn |> get("/api/v1/admin/paths", params) |> json_response(200)
+
+      assert response["sessions"] == [
+               %{
+                 "date" => "2026-09-10",
+                 "source" => "Google",
+                 "device" => "Desktop",
+                 "steps" => [
+                   ["/", 0],
+                   ["transcribe_success", 10],
+                   ["/pricing", 40],
+                   ["checkout_click(tier=pro)", 50]
+                 ]
+               }
+             ]
+
+      refute Jason.encode!(response) =~ "txn_01abc"
+    end
+
+    test "next and prev modes count neighbouring steps", %{conn: conn, site: site} do
+      params =
+        Map.merge(@range, %{site_id: site.domain, mode: "next", step: "transcribe_success"})
+
+      response = conn |> get("/api/v1/admin/paths", params) |> json_response(200)
+
+      assert response["occurrences"] == 2
+
+      assert response["steps"] == [
+               %{"step" => "/dashboard/transcripts/:id", "count" => 1, "share" => 0.5},
+               %{"step" => "/pricing", "count" => 1, "share" => 0.5}
+             ]
+
+      params = Map.merge(@range, %{site_id: site.domain, mode: "prev", step: "/ja"})
+      response = recycle(conn) |> get("/api/v1/admin/paths", params) |> json_response(200)
+
+      assert response["step"] == "/"
+      assert response["steps"] == [%{"step" => "(entry)", "count" => 3, "share" => 1.0}]
+    end
+
+    test "rejects invalid params", %{conn: conn, site: site} do
+      for {params, message} <- [
+            {%{mode: "graph"}, "mode"},
+            {%{mode: "next"}, "step"},
+            {%{from: "2026-01-01", to: "2026-09-30"}, "90 days"},
+            {%{from: "2026-09-30", to: "2026-09-01"}, "after"},
+            {%{to: "yesterday"}, "ISO 8601"},
+            {%{limit: "0"}, "limit"},
+            {%{props: "error_message"}, "props"},
+            {%{props: "user_id"}, "props"}
+          ] do
+        response =
+          conn
+          |> recycle()
+          |> get("/api/v1/admin/paths", Map.put(params, :site_id, site.domain))
+          |> json_response(400)
+
+        assert response["error"] =~ message
+      end
+    end
+
+    test "viewer API keys cannot read paths", %{conn: conn, user: user, site: site} do
+      Plausible.Repo.get_by!(Plausible.Site.Membership, user_id: user.id, site_id: site.id)
+      |> Ecto.Changeset.change(role: :viewer)
+      |> Plausible.Repo.update!()
+
+      conn = get(conn, "/api/v1/admin/paths", %{site_id: site.domain})
+      assert %{"error" => _} = json_response(conn, 404)
+    end
+  end
 end
