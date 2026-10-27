@@ -34,7 +34,7 @@ defmodule PlausibleWeb.StatsControllerTest do
                |> find("meta[name=robots]")
                |> Floki.attribute("content")
 
-      assert text_of_element(resp, "title") == "Plausible · #{site.domain}"
+      assert text_of_element(resp, "title") == "Recount · #{site.domain}"
     end
 
     test "plausible.io live demo - shows site stats", %{conn: conn} do

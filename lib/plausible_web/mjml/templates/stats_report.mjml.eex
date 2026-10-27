@@ -2,7 +2,7 @@
   <mj-head>
     <mj-attributes>
       <mj-text color="#3d4852" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14px" />
-      <mj-button background-color="#4338ca" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" color="#ffffff" font-size="14px" />
+      <mj-button background-color="#0b5a6e" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" color="#ffffff" font-size="14px" />
       <mj-class name="text-lg" font-size="24px" font-weight="bold" />
       <mj-class name="text-sm" font-size="14px" font-weight="normal" />
       <mj-class name="text-label" font-size="14px" font-weight="bold" color="#666666" />

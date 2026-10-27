@@ -96,7 +96,7 @@ export default function GraphTooltip(graphData, metric, query) {
           `<div class="flex flex-col">
             <div class="flex flex-row justify-between items-center">
               <span class="flex items-center mr-4">
-                <div class="w-3 h-3 mr-1 rounded-full" style="background-color: rgba(101,116,205)"></div>
+                <div class="w-3 h-3 mr-1 rounded-full" style="background-color: rgba(25,147,174)"></div>
                 <span>${tooltipData.label}</span>
               </span>
               <span class="text-base font-bold">${tooltipData.formattedValue}</span>

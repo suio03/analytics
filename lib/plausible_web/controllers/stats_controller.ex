@@ -385,6 +385,6 @@ defmodule PlausibleWeb.StatsController do
   end
 
   defp title(_conn, site) do
-    "Plausible · " <> site.domain
+    "Recount · " <> site.domain
   end
 end

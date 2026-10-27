@@ -199,15 +199,15 @@ blockquote {
 }
 
 .table-striped tbody tr:nth-child(odd) {
-  background-color: #f1f5f8;
+  background-color: #eef0f3;
 }
 
 .dark .table-striped tbody tr:nth-child(odd) {
-  background-color: rgb(37 47 63);
+  background-color: #21262d;
 }
 
 .dark .table-striped tbody tr:nth-child(even) {
-  background-color: rgb(26 32 44);
+  background-color: #1a1e24;
 }
 
 .stats-item {
@@ -278,7 +278,7 @@ iframe[hidden] {
 }
 
 #chartjs-tooltip {
-  background-color: rgba(25 30 56);
+  background-color: #15181d;
   position: absolute;
   font-size: 14px;
   font-style: normal;
@@ -291,13 +291,13 @@ iframe[hidden] {
 .active-prop-heading {
   /* Properties related to text-decoration are all here in one place. TailwindCSS does support underline but that's about it. */
   text-decoration-line: underline;
-  text-decoration-color: #4338ca; /* tailwind's indigo-700 */
+  text-decoration-color: #0b5a6e; /* theme indigo-700 */
   text-decoration-thickness: 2px;
 }
 
 @media (prefers-color-scheme: dark) {
   .active-prop-heading {
-    text-decoration-color: #6366f1; /* tailwind's indigo-500 */
+    text-decoration-color: #1993ae; /* theme indigo-500 */
   }
 }
 
@@ -308,7 +308,7 @@ iframe[hidden] {
 /* stylelint-enable */
 
 .popper-tooltip {
-  background-color: rgba(25 30 56);
+  background-color: #15181d;
 }
 
 .tooltip-arrow,

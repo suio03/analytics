@@ -51,7 +51,7 @@ defmodule Plausible do
 
   if Mix.env() in @ce_builds do
     def product_name do
-      "Plausible CE"
+      "Recount"
     end
   else
     def product_name do

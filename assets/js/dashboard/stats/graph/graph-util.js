@@ -55,9 +55,9 @@ const buildComparisonDataset = function(comparisonPlot) {
 
   return [{
     data: comparisonPlot,
-    borderColor: 'rgba(60,70,110,0.2)',
-    pointBackgroundColor: 'rgba(60,70,110,0.2)',
-    pointHoverBackgroundColor: 'rgba(60, 70, 110)',
+    borderColor: 'rgba(89,97,109,0.2)',
+    pointBackgroundColor: 'rgba(89,97,109,0.2)',
+    pointHoverBackgroundColor: 'rgba(89, 97, 109)',
     yAxisID: 'yComparison',
   }]
 }
@@ -71,8 +71,8 @@ const buildDashedDataset = function(plot, presentIndex) {
   return [{
     data: dashedPlot,
     borderDash: [3, 3],
-    borderColor: 'rgba(101,116,205)',
-    pointHoverBackgroundColor: 'rgba(71, 87, 193)',
+    borderColor: 'rgba(25,147,174)',
+    pointHoverBackgroundColor: 'rgba(11, 110, 134)',
     yAxisID: 'y',
   }]
 }
@@ -82,9 +82,9 @@ const buildMainPlotDataset = function(plot, presentIndex) {
 
   return [{
     data: data,
-    borderColor: 'rgba(101,116,205)',
-    pointBackgroundColor: 'rgba(101,116,205)',
-    pointHoverBackgroundColor: 'rgba(71, 87, 193)',
+    borderColor: 'rgba(25,147,174)',
+    pointBackgroundColor: 'rgba(25,147,174)',
+    pointHoverBackgroundColor: 'rgba(11, 110, 134)',
     yAxisID: 'y',
   }]
 }
@@ -92,10 +92,10 @@ const buildMainPlotDataset = function(plot, presentIndex) {
 export const buildDataSet = (plot, comparisonPlot, present_index, ctx, label) => {
   var gradient = ctx.createLinearGradient(0, 0, 0, 300);
   var prev_gradient = ctx.createLinearGradient(0, 0, 0, 300);
-  gradient.addColorStop(0, 'rgba(101,116,205, 0.2)');
-  gradient.addColorStop(1, 'rgba(101,116,205, 0)');
-  prev_gradient.addColorStop(0, 'rgba(101,116,205, 0.075)');
-  prev_gradient.addColorStop(1, 'rgba(101,116,205, 0)');
+  gradient.addColorStop(0, 'rgba(25,147,174, 0.2)');
+  gradient.addColorStop(1, 'rgba(25,147,174, 0)');
+  prev_gradient.addColorStop(0, 'rgba(25,147,174, 0.075)');
+  prev_gradient.addColorStop(1, 'rgba(25,147,174, 0)');
 
   const defaultOptions = { label, borderWidth: 3, pointBorderColor: "transparent", pointHoverRadius: 4, backgroundColor: gradient, fill: true }
 

@@ -6,7 +6,7 @@ defmodule Plausible.Site.Memberships.AcceptInvitationTest do
 
   alias Plausible.Site.Memberships.AcceptInvitation
 
-  @subject_prefix if ee?(), do: "[Plausible Analytics] ", else: "[Plausible CE] "
+  @subject_prefix if ee?(), do: "[Plausible Analytics] ", else: "[Recount] "
 
   describe "transfer_ownership/3" do
     test "transfers ownership successfully" do

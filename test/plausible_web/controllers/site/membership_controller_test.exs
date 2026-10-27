@@ -6,7 +6,7 @@ defmodule PlausibleWeb.Site.MembershipControllerTest do
 
   import Plausible.Test.Support.HTML
 
-  @subject_prefix if ee?(), do: "[Plausible Analytics] ", else: "[Plausible CE] "
+  @subject_prefix if ee?(), do: "[Plausible Analytics] ", else: "[Recount] "
 
   setup [:create_user, :log_in]
 
