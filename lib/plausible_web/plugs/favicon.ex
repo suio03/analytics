@@ -138,18 +138,18 @@ defmodule PlausibleWeb.Favicon do
 
   # Sites often answer unknown paths with an HTML page and status 200
   defp fetch_valid_site_icon(url) do
-    case fetch_valid_icon(url) do
-      {:ok, %Finch.Response{body: body, headers: headers}} = response ->
-        content_type =
-          Enum.find_value(headers, "", fn {k, v} -> if k == "content-type", do: v end)
-
-        if String.starts_with?(content_type, "image/") or String.starts_with?(body, "<svg"),
-          do: response,
-          else: :error
-
-      error ->
-        error
+    with {:ok, response} <- fetch_valid_icon(url),
+         true <- image_response?(response) do
+      {:ok, response}
+    else
+      _ -> :error
     end
+  end
+
+  defp image_response?(%Finch.Response{body: body, headers: headers}) do
+    content_type = Enum.find_value(headers, "", fn {k, v} -> if k == "content-type", do: v end)
+
+    String.starts_with?(content_type, "image/") or String.starts_with?(body, "<svg")
   end
 
   defp google_icon_url(domain) do
