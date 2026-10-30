@@ -2,7 +2,8 @@ defmodule PlausibleWeb.Favicon do
   @referer_domains_file "priv/referer_favicon_domains.json"
   @moduledoc """
   A Plug that fetches favicon images from DuckDuckGo with Google fallback and returns them
-  to the Plausible frontend.
+  to the Plausible frontend. For domains of registered sites, it finally tries the site's
+  own `/favicon.ico` and `/favicon.svg`.
 
   The proxying is there so we can reduce the number of third-party domains that
   the browser clients need to connect to. Our goal is to have 0 third-party domain
@@ -47,7 +48,13 @@ defmodule PlausibleWeb.Favicon do
 
   ## Placeholder
 
-  When both providers fail, we cache a placeholder for one hour.
+  When both providers fail and the domain belongs to a registered site, we request
+  `https://<domain>/favicon.ico` and then `https://<domain>/favicon.svg` directly.
+  This covers sites the providers have not indexed yet, such as sites that only
+  declare an SVG icon. Arbitrary domains and IP addresses are never requested
+  directly, so the public endpoint cannot be used to reach other hosts.
+
+  When every source fails, we cache a placeholder for one hour.
   Provider failures include:
 
   1. Network errors
@@ -108,9 +115,40 @@ defmodule PlausibleWeb.Favicon do
   end
 
   defp fetch_icon(domain) do
-    case fetch_valid_icon("https://icons.duckduckgo.com/ip3/#{domain}.ico") do
-      {:ok, _} = response -> response
-      _ -> fetch_valid_icon(google_icon_url(domain))
+    with :error <- fetch_valid_icon("https://icons.duckduckgo.com/ip3/#{domain}.ico"),
+         :error <- fetch_valid_icon(google_icon_url(domain)) do
+      fetch_site_icon(domain)
+    end
+  end
+
+  defp fetch_site_icon(domain) do
+    if site_hostname?(domain) and Plausible.Sites.get_by_domain(domain) do
+      with :error <- fetch_valid_site_icon("https://#{domain}/favicon.ico") do
+        fetch_valid_site_icon("https://#{domain}/favicon.svg")
+      end
+    else
+      :error
+    end
+  end
+
+  defp site_hostname?(domain) do
+    String.match?(domain, ~r/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i) and
+      not match?({:ok, _}, :inet.parse_address(String.to_charlist(domain)))
+  end
+
+  # Sites often answer unknown paths with an HTML page and status 200
+  defp fetch_valid_site_icon(url) do
+    case fetch_valid_icon(url) do
+      {:ok, %Finch.Response{body: body, headers: headers}} = response ->
+        content_type =
+          Enum.find_value(headers, "", fn {k, v} -> if k == "content-type", do: v end)
+
+        if String.starts_with?(content_type, "image/") or String.starts_with?(body, "<svg"),
+          do: response,
+          else: :error
+
+      error ->
+        error
     end
   end
 

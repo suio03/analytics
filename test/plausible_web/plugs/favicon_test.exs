@@ -193,6 +193,80 @@ defmodule PlausibleWeb.FaviconTest do
     end
   end
 
+  describe "site favicon fallback" do
+    defp expect_providers_fail(domain) do
+      expect(Plausible.HTTPClient.Mock, :get, fn url ->
+        assert url == "https://icons.duckduckgo.com/ip3/#{domain}.ico"
+        {:ok, %Finch.Response{status: 404, body: "not found"}}
+      end)
+
+      expect(Plausible.HTTPClient.Mock, :get, fn url ->
+        assert URI.parse(url).host == "t1.gstatic.com"
+        {:ok, %Finch.Response{status: 404, body: "not found"}}
+      end)
+    end
+
+    test "requests favicon.ico from a registered site", %{plug_opts: plug_opts} do
+      insert(:site, domain: "registered.example")
+      expect_providers_fail("registered.example")
+
+      expect(Plausible.HTTPClient.Mock, :get, fn "https://registered.example/favicon.ico" ->
+        {:ok,
+         %Finch.Response{
+           status: 200,
+           body: "site icon",
+           headers: [{"content-type", "image/vnd.microsoft.icon"}]
+         }}
+      end)
+
+      conn = conn(:get, "/favicon/sources/registered.example?v=2") |> Favicon.call(plug_opts)
+
+      assert conn.resp_body == "site icon"
+      assert get_resp_header(conn, "content-type") == ["image/vnd.microsoft.icon"]
+      assert get_resp_header(conn, "content-security-policy") == ["script-src 'none'"]
+    end
+
+    test "falls back to favicon.svg when favicon.ico is an HTML page", %{plug_opts: plug_opts} do
+      insert(:site, domain: "registered.example")
+      expect_providers_fail("registered.example")
+
+      expect(Plausible.HTTPClient.Mock, :get, fn "https://registered.example/favicon.ico" ->
+        {:ok,
+         %Finch.Response{
+           status: 200,
+           body: "<!doctype html>",
+           headers: [{"content-type", "text/html"}]
+         }}
+      end)
+
+      expect(Plausible.HTTPClient.Mock, :get, fn "https://registered.example/favicon.svg" ->
+        {:ok, %Finch.Response{status: 200, body: "<svg></svg>", headers: []}}
+      end)
+
+      conn = conn(:get, "/favicon/sources/registered.example?v=2") |> Favicon.call(plug_opts)
+
+      assert conn.resp_body == "<svg></svg>"
+      assert get_resp_header(conn, "content-type") == ["image/svg+xml; charset=utf-8"]
+    end
+
+    test "does not request unregistered domains directly", %{plug_opts: plug_opts} do
+      expect_providers_fail("unregistered.example")
+
+      conn = conn(:get, "/favicon/sources/unregistered.example") |> Favicon.call(plug_opts)
+
+      assert conn.resp_body == File.read!("priv/placeholder_favicon.ico")
+    end
+
+    test "does not request IP addresses directly", %{plug_opts: plug_opts} do
+      insert(:site, domain: "127.0.0.1")
+      expect_providers_fail("127.0.0.1")
+
+      conn = conn(:get, "/favicon/sources/127.0.0.1") |> Favicon.call(plug_opts)
+
+      assert conn.resp_body == File.read!("priv/placeholder_favicon.ico")
+    end
+  end
+
   test "serves explicit placeholder without fetching providers", %{plug_opts: plug_opts} do
     conn = conn(:get, "/favicon/sources/placeholder?v=2") |> Favicon.call(plug_opts)
 
