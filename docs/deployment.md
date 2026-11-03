@@ -22,3 +22,12 @@ For rollback, change only the application image to a previous `v2.1.5-custom-<sh
 ## Last verified manual deployment
 
 On 2026-09-09, `v2.1.5-custom-a98410b` replaced `v2.1.5-custom-40eab1c`. Dokploy reported Done and the application container started. The deployment webhook secret and production-tag Compose configuration were enabled with user approval on the same day. The first automated run must be checked in GitHub Actions and Dokploy.
+
+## When a push deploys nothing
+
+GitHub periodically disables workflows on forks ("Workflows on this fork have been disabled" on the
+repository's Actions tab), while Settings → Actions still shows them allowed. Pushes then update the
+branch without running CI, building or deploying; `gh workflow run` answers "Actions has been disabled
+for this repository". Re-enable on the Actions tab ("I understand my workflows…"; none of these
+workflows run on a schedule) and push again: a push made while disabled does not run afterwards.
+Last seen 2026-11-03.
