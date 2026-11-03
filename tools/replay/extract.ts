@@ -147,7 +147,9 @@ export function extract(loads: RrwebEvent[][]): Extracted | undefined {
         if (
           !b.reacted &&
           !t.newTab &&
-          !(t.tag === 'input' || t.tag === 'select' || t.tag === 'textarea')
+          // A label passes its click on to its field (a file field opens a picker the page
+          // doesn't show); the field's own click is what counts.
+          !(t.tag === 'input' || t.tag === 'select' || t.tag === 'textarea' || t.tag === 'label')
         )
           b.click.dead = true
       }
