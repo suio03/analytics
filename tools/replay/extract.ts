@@ -260,6 +260,9 @@ export function extract(loads: RrwebEvent[][]): Extracted | undefined {
         } else if (d.source === Source.Resize) {
           viewport = d.height ?? viewport
         } else if (d.source === Source.Input) {
+          // Recorders that set userTriggeredOnInput mark values the page set itself (a form
+          // filled on mount, a file field cleared); only what the visitor typed or picked counts.
+          if (d.userTriggered === false) continue
           reacted(ts)
           const target = describe(d.id)
           if (!target) continue

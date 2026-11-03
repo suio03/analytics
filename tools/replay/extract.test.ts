@@ -110,6 +110,12 @@ describe('extract', () => {
     expect(c).toMatchObject({ target: { tag: 'a', href: '/docs' } })
   })
 
+  it('ignores values the page set itself', () => {
+    const r = extract([load(0, [1000, input(23, { userTriggered: false })], idle(9000))])
+    expect(r?.timeline.map((i) => i.kind)).toEqual(['page'])
+    expect(r?.counts).toMatchObject({ abandoned_forms: 0 })
+  })
+
   it('reports forms edited and left unsent, with field labels only', () => {
     const r = extract([
       load(
