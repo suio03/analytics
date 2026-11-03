@@ -81,6 +81,35 @@ defmodule PlausibleWeb.Api.AdminEventsController do
     end
   end
 
+  def replays(conn, params) do
+    with {:ok, site} <- get_site(conn, params),
+         {:ok, result} <- Plausible.Replays.list(site, params) do
+      json(conn, result)
+    else
+      error -> respond_error(conn, error)
+    end
+  end
+
+  def replay(conn, %{"session_id" => session_id} = params) do
+    with {:ok, site} <- get_site(conn, params),
+         {:ok, visitor, loads} <- Plausible.Replays.recording(site, session_id) do
+      conn
+      |> put_resp_content_type("application/json")
+      |> send_resp(200, [
+        ~s({"session_id":),
+        Jason.encode!(session_id),
+        ~s(,"visitor_id":),
+        Jason.encode!(visitor),
+        ~s(,"loads":),
+        loads,
+        "}"
+      ])
+    else
+      {:error, :not_found} -> H.not_found(conn, "No recording for this session")
+      error -> respond_error(conn, error)
+    end
+  end
+
   def index(conn, params) do
     case get_site(conn, params) do
       {:ok, site} ->
@@ -213,6 +242,12 @@ defmodule PlausibleWeb.Api.AdminEventsController do
         conn,
         "Parameter `props` cannot include identifier, URL, name or free-text properties"
       )
+
+  defp respond_error(conn, {:error, :invalid_days}),
+    do: H.bad_request(conn, "Parameter `days` must be an integer between 1 and 30")
+
+  defp respond_error(conn, {:error, :invalid_visitor}),
+    do: H.bad_request(conn, "Parameter `visitor` must be a recorder visitor id")
 
   defp respond_error(conn, {:error, :missing_step}),
     do: H.bad_request(conn, "Parameter `step` is required for next and prev modes")

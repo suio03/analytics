@@ -80,3 +80,4 @@ plausible-report.xml
 .clickhouse_db_vol*
 plausible_db*
 .env.local
+/tools/replay/node_modules/

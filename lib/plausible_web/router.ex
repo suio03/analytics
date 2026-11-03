@@ -226,6 +226,8 @@ defmodule PlausibleWeb.Router do
     get "/properties", AdminEventsController, :properties
     post "/properties", AdminEventsController, :add_properties
     get "/paths", AdminEventsController, :paths
+    get "/replays", AdminEventsController, :replays
+    get "/replays/:session_id", AdminEventsController, :replay
     get "/events", AdminEventsController, :index
     post "/events", AdminEventsController, :create
     put "/events", AdminEventsController, :sync
@@ -272,6 +274,7 @@ defmodule PlausibleWeb.Router do
       pipe_through :external_api
 
       post "/event", Api.ExternalController, :event
+      post "/replay", Api.ReplayController, :ingest
       get "/error", Api.ExternalController, :error
       get "/health", Api.ExternalController, :health
       get "/system", Api.ExternalController, :info

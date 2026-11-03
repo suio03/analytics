@@ -1,0 +1,15 @@
+{
+  "name": "plausible-replay-tools",
+  "private": true,
+  "type": "module",
+  "description": "Reads session recordings from the admin API: timelines, scans and a local player.",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "rrweb-player": "2.1.6"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
+}

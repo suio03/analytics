@@ -92,3 +92,23 @@ event name also matches its labels with props.
 Limits: 30 steps per visit and 500,000 scanned events (`truncated: true` when
 reached). Visits cannot be linked across days because visitor hashes rotate
 daily.
+
+## Session recordings (read-only)
+
+Sites can post rrweb recordings to `POST /api/replay?s=<site>&vid=<visitor>&sid=<session>&load=<page load>&seq=<n>`
+(body: a JSON array of rrweb events, gzip or plain, `text/plain`). The site's recorder must mask page
+text and typed values itself; tapemoon's is `src/lib/replay.ts` in that repo. Batches are kept 30 days
+(`replay_chunks` in ClickHouse). Unknown sites and bots get `202` and nothing is stored.
+
+Read them with the admin API key (owner or admin of the site), same env as above:
+
+```bash
+bin/replays list tapemoon.com --days 3                 # recorded sessions, newest first
+bin/replays scan tapemoon.com --days 7 --has checkout_click   # one line per session + rage/dead clicks, errors, last actions
+bin/replays timeline tapemoon.com <session_id>         # what happened, as text (pages, clicks, events, pauses)
+bin/replays play tapemoon.com <session_id>             # writes an HTML player to the temp dir and opens it
+```
+
+`--json` prints raw data for `list`, `scan` and `timeline`. The admin endpoints are
+`GET /api/v1/admin/replays?site_id=&days=&limit=&visitor=` and `GET /api/v1/admin/replays/:session_id?site_id=`.
+Timeline extraction lives in `tools/replay` (Node 22, `npm test` there).

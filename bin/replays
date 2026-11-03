@@ -1,0 +1,5 @@
+#!/bin/sh
+# Session recordings: list, scan, timeline, play. See docs/admin-cli.md.
+dir=$(cd "$(dirname "$0")/../tools/replay" && pwd)
+[ -d "$dir/node_modules" ] || (cd "$dir" && npm install --silent >/dev/null)
+exec node --no-warnings "$dir/cli.ts" "$@"
