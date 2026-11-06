@@ -40,6 +40,18 @@ defmodule PlausibleWeb.LayoutView do
     end
   end
 
+  # Shown as a looping strip in the CE footer. The list is rendered four times so the
+  # CSS animation can wrap from the end back to the start without a jump.
+  @footer_products [
+    {"Tapemoon", "https://tapemoon.com", "AI music videos"},
+    {"Saybrush", "https://saybrush.com", "AI image editor"},
+    {"Muzix", "https://muzix.app", "AI music generator"},
+    {"Ordalin", "https://ordalin.com", "Find the right AI tool"},
+    {"AI Label Remover", "https://ailabelremover.tools", "Remove AI metadata"}
+  ]
+
+  def footer_products, do: @footer_products
+
   def logo_path(filename) do
     if ee?() do
       Path.join("/images/ee/", filename)

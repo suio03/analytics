@@ -328,3 +328,44 @@ iframe[hidden] {
   content: '';
   transform: rotate(45deg) translateY(1px);
 }
+
+/* Footer product links: the list is rendered four times (wide screens can show more than one copy), so moving by half the track loops seamlessly. */
+.product-marquee {
+  overflow: hidden;
+  mask-image: linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
+}
+
+.product-marquee-track {
+  display: flex;
+  gap: 1rem;
+  width: max-content;
+  animation: product-marquee 60s linear infinite;
+}
+
+.product-marquee-track > li {
+  flex: 0 0 auto;
+}
+
+.product-marquee:hover .product-marquee-track,
+.product-marquee:focus-within .product-marquee-track {
+  animation-play-state: paused;
+}
+
+@keyframes product-marquee {
+  /* Half the track plus half a gap is exactly two copies, so the third copy lands where the first started. */
+  to {
+    transform: translateX(calc(-50% - 0.5rem));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .product-marquee-track {
+    animation: none;
+    flex-wrap: wrap;
+    width: auto;
+  }
+
+  .product-marquee-track > li[aria-hidden='true'] {
+    display: none;
+  }
+}

@@ -19,12 +19,36 @@
         <% end %>
 
         <%= if ce?() do %>
-          This dashboard is running on self-managed infrastructure, not tested by Plausible Analytics. We cannot vouch for its performance or reliability. For official managed hosting, check out
-          <.styled_link href="https://plausible.io">
-            plausible.io
-          </.styled_link>
+          Self-hosted analytics for the products we build.
         <% end %>
       </p>
+      <%= if ce?() do %>
+        <div class="mt-8">
+          <h5 class="text-sm font-semibold tracking-wider text-gray-300 uppercase">
+            Our products
+          </h5>
+          <div class="product-marquee mt-3">
+            <ul class="product-marquee-track">
+              <%= for copy <- [false, true, true, true] do %>
+                <%= for {name, url, tagline} <- footer_products() do %>
+                  <li aria-hidden={if copy, do: "true"}>
+                    <a
+                      href={url}
+                      tabindex={if copy, do: "-1"}
+                      target="_blank"
+                      rel="noopener"
+                      class="block rounded-md border border-gray-700 px-4 py-2 hover:border-gray-500"
+                    >
+                      <span class="block text-sm font-semibold text-gray-200"><%= name %></span>
+                      <span class="block text-xs text-gray-400"><%= tagline %></span>
+                    </a>
+                  </li>
+                <% end %>
+              <% end %>
+            </ul>
+          </div>
+        </div>
+      <% end %>
     </div>
   </div>
 </div>
