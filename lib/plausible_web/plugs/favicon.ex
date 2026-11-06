@@ -126,15 +126,15 @@ defmodule PlausibleWeb.Favicon do
   # icon providers can't resolve them. Use the referrer host those visits most often came
   # from instead.
   defp tagged_source_domain(source) do
-    if String.contains?(source, ".") do
-      nil
-    else
-      case Plausible.Cache.Adapter.fetch(:referrer_favicon_domains, source, fn ->
-             top_referrer_host(source)
-           end) do
-        {:ok, host} when is_binary(host) -> host
-        _ -> nil
-      end
+    if String.contains?(source, "."), do: nil, else: cached_referrer_host(source)
+  end
+
+  defp cached_referrer_host(source) do
+    case Plausible.Cache.Adapter.fetch(:referrer_favicon_domains, source, fn ->
+           top_referrer_host(source)
+         end) do
+      {:ok, host} when is_binary(host) -> host
+      _ -> nil
     end
   end
 
