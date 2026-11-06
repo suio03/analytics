@@ -28,6 +28,7 @@ defmodule PlausibleWeb.Favicon do
   managed by `Mix.Tasks.GenerateReferrerFavicons.run/1`
   """
   import Plug.Conn
+  import Ecto.Query, only: [from: 2]
   alias Plausible.HTTPClient
 
   @placeholder_icon_location "priv/placeholder_favicon.ico"
@@ -94,7 +95,7 @@ defmodule PlausibleWeb.Favicon do
 
       "/favicon/sources/" <> source ->
         clean_source = URI.decode_www_form(source)
-        domain = Map.get(favicon_domains, clean_source, clean_source)
+        domain = favicon_domain(clean_source, favicon_domains)
 
         case fetch_icon(domain) do
           {:ok, %Finch.Response{body: body, headers: headers}} ->
@@ -112,6 +113,53 @@ defmodule PlausibleWeb.Favicon do
       _ ->
         conn
     end
+  end
+
+  defp favicon_domain(source, favicon_domains) do
+    case Map.fetch(favicon_domains, source) do
+      {:ok, domain} -> domain
+      :error -> tagged_source_domain(source) || source
+    end
+  end
+
+  # Sources set by `?ref=` / `utm_source=` (e.g. "taaft") are names, not hostnames, so the
+  # icon providers can't resolve them. Use the referrer host those visits most often came
+  # from instead.
+  defp tagged_source_domain(source) do
+    if String.contains?(source, ".") do
+      nil
+    else
+      case Plausible.Cache.Adapter.fetch(:referrer_favicon_domains, source, fn ->
+             top_referrer_host(source)
+           end) do
+        {:ok, host} when is_binary(host) -> host
+        _ -> nil
+      end
+    end
+  end
+
+  @referrer_lookup_days 30
+  defp top_referrer_host(source) do
+    query =
+      from s in "sessions_v2",
+        where:
+          s.referrer_source == ^source and s.referrer != "" and
+            s.start > fragment("now() - toIntervalDay(?)", ^@referrer_lookup_days),
+        group_by: fragment("host"),
+        order_by: [desc: fragment("count()")],
+        limit: 1,
+        select: fragment("splitByChar('/', ?)[1] AS host", s.referrer)
+
+    case Plausible.ClickhouseRepo.one(query) do
+      host when is_binary(host) and host != "" ->
+        {:ok, if(site_hostname?(host), do: host, else: :none)}
+
+      _ ->
+        {:ok, :none}
+    end
+  rescue
+    # An error result is not cached, so the next request retries
+    e -> {:error, e}
   end
 
   defp fetch_icon(domain) do

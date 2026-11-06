@@ -37,6 +37,12 @@ defmodule Plausible.Application do
         ttl_check_interval: :timer.seconds(5),
         global_ttl: :timer.minutes(60)
       ),
+      Plausible.Cache.Adapter.child_spec(
+        :referrer_favicon_domains,
+        :cache_referrer_favicon_domains,
+        ttl_check_interval: :timer.minutes(5),
+        global_ttl: :timer.hours(6)
+      ),
       Plausible.Cache.Adapter.child_spec(:sessions, :cache_sessions,
         ttl_check_interval: :timer.seconds(1),
         global_ttl: :timer.minutes(30)

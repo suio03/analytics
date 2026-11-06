@@ -193,6 +193,45 @@ defmodule PlausibleWeb.FaviconTest do
     end
   end
 
+  describe "tagged source fallback" do
+    test "uses the most common referrer host of a source name", %{plug_opts: plug_opts} do
+      site = insert(:site)
+      source = "tagged#{System.unique_integer([:positive])}"
+
+      populate_stats(site, [
+        build(:pageview, referrer_source: source, referrer: "www-less.example/a"),
+        build(:pageview, referrer_source: source, referrer: "top.example/a"),
+        build(:pageview, referrer_source: source, referrer: "top.example/b"),
+        build(:pageview, referrer_source: source, referrer: "")
+      ])
+
+      expect(
+        Plausible.HTTPClient.Mock,
+        :get,
+        fn "https://icons.duckduckgo.com/ip3/top.example.ico" ->
+          {:ok, %Finch.Response{status: 200, body: "top icon"}}
+        end
+      )
+
+      conn = conn(:get, "/favicon/sources/#{source}") |> Favicon.call(plug_opts)
+
+      assert conn.resp_body == "top icon"
+    end
+
+    test "falls back to the source name when it has no referrer", %{plug_opts: plug_opts} do
+      source = "untagged#{System.unique_integer([:positive])}"
+
+      expect(Plausible.HTTPClient.Mock, :get, fn url ->
+        assert url == "https://icons.duckduckgo.com/ip3/#{source}.ico"
+        {:ok, %Finch.Response{status: 200, body: "name icon"}}
+      end)
+
+      conn = conn(:get, "/favicon/sources/#{source}") |> Favicon.call(plug_opts)
+
+      assert conn.resp_body == "name icon"
+    end
+  end
+
   describe "site favicon fallback" do
     defp expect_providers_fail(domain) do
       expect(Plausible.HTTPClient.Mock, :get, fn url ->
