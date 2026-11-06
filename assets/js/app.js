@@ -120,3 +120,31 @@ if (embedButton) {
     }
   })
 }
+
+// Footer product strip (same approach as pixfy's home partners): loop only when the
+// links are wider than the footer, using one hidden copy so the end meets the start.
+document.querySelectorAll('[data-product-marquee]').forEach((box) => {
+  const list = box.querySelector('ul')
+  const originals = Array.from(list.children)
+
+  for (const item of originals) {
+    const copy = item.cloneNode(true)
+    copy.setAttribute('data-loop-copy', '')
+    copy.setAttribute('aria-hidden', 'true')
+    copy.querySelectorAll('a').forEach((link) => link.setAttribute('tabindex', '-1'))
+    list.appendChild(copy)
+  }
+
+  const measure = () => {
+    const gap = parseFloat(getComputedStyle(list).columnGap) || 0
+    const distance = originals.reduce(
+      (total, item) => total + item.getBoundingClientRect().width + gap,
+      0
+    )
+    list.style.setProperty('--product-loop-distance', `${distance}px`)
+    list.style.setProperty('--product-loop-duration', `${distance / 32}s`)
+    list.dataset.autoLoop = String(distance - gap > box.clientWidth)
+  }
+
+  new ResizeObserver(measure).observe(box)
+})

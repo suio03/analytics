@@ -329,21 +329,32 @@ iframe[hidden] {
   transform: rotate(45deg) translateY(1px);
 }
 
-/* Footer product links: the list is rendered four times (wide screens can show more than one copy), so moving by half the track loops seamlessly. */
+/* Footer product links. Static when they fit; app.js sets data-auto-loop and appends one
+   aria-hidden copy when they overflow, then moves the track by one copy's width. */
 .product-marquee {
   overflow: hidden;
-  mask-image: linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
 }
 
 .product-marquee-track {
   display: flex;
   gap: 1rem;
   width: max-content;
-  animation: product-marquee 60s linear infinite;
 }
 
 .product-marquee-track > li {
   flex: 0 0 auto;
+}
+
+.product-marquee:has([data-auto-loop='true']) {
+  mask-image: linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
+}
+
+.product-marquee-track[data-auto-loop='true'] {
+  animation: product-marquee var(--product-loop-duration) linear infinite;
+}
+
+.product-marquee-track:not([data-auto-loop='true']) [data-loop-copy] {
+  display: none;
 }
 
 .product-marquee:hover .product-marquee-track,
@@ -352,20 +363,22 @@ iframe[hidden] {
 }
 
 @keyframes product-marquee {
-  /* Half the track plus half a gap is exactly two copies, so the third copy lands where the first started. */
   to {
-    transform: translateX(calc(-50% - 0.5rem));
+    transform: translateX(calc(-1 * var(--product-loop-distance)));
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .product-marquee-track {
+  .product-marquee-track[data-auto-loop='true'] {
     animation: none;
+  }
+
+  .product-marquee-track {
     flex-wrap: wrap;
     width: auto;
   }
 
-  .product-marquee-track > li[aria-hidden='true'] {
+  .product-marquee-track [data-loop-copy] {
     display: none;
   }
 }

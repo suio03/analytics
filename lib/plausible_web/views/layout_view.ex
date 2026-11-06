@@ -40,8 +40,8 @@ defmodule PlausibleWeb.LayoutView do
     end
   end
 
-  # Shown as a looping strip in the CE footer. The list is rendered four times so the
-  # CSS animation can wrap from the end back to the start without a jump.
+  # Shown in the CE footer. Rendered once; `assets/js/app.js` adds a hidden copy and
+  # loops the strip only when it is wider than the footer.
   @footer_products [
     {"Tapemoon", "https://tapemoon.com", "AI music videos"},
     {"Saybrush", "https://saybrush.com", "AI image editor"},

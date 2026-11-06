@@ -27,23 +27,20 @@
           <h5 class="text-sm font-semibold tracking-wider text-gray-300 uppercase">
             Our products
           </h5>
-          <div class="product-marquee mt-3">
+          <div class="product-marquee mt-3" data-product-marquee>
             <ul class="product-marquee-track">
-              <%= for copy <- [false, true, true, true] do %>
-                <%= for {name, url, tagline} <- footer_products() do %>
-                  <li aria-hidden={if copy, do: "true"}>
-                    <a
-                      href={url}
-                      tabindex={if copy, do: "-1"}
-                      target="_blank"
-                      rel="noopener"
-                      class="block rounded-md border border-gray-700 px-4 py-2 hover:border-gray-500"
-                    >
-                      <span class="block text-sm font-semibold text-gray-200"><%= name %></span>
-                      <span class="block text-xs text-gray-400"><%= tagline %></span>
-                    </a>
-                  </li>
-                <% end %>
+              <%= for {name, url, tagline} <- footer_products() do %>
+                <li>
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener"
+                    class="block rounded-md border border-gray-700 px-4 py-2 hover:border-gray-500"
+                  >
+                    <span class="block text-sm font-semibold text-gray-200"><%= name %></span>
+                    <span class="block text-xs text-gray-400"><%= tagline %></span>
+                  </a>
+                </li>
               <% end %>
             </ul>
           </div>
