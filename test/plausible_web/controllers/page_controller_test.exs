@@ -10,6 +10,7 @@ defmodule PlausibleWeb.PageControllerTest do
       assert build_conn() |> get("/") |> html_response(200) =~ "Welcome to Recount!"
     end
 
+    @tag :ce_build_only
     test "footer links our products and no longer points to plausible.io" do
       html = build_conn() |> get("/") |> html_response(200)
 
