@@ -43,6 +43,8 @@ defmodule Plausible.ClickhouseEventV2 do
     field :operating_system_version, Ch, type: "LowCardinality(String)"
     field :browser, Ch, type: "LowCardinality(String)"
     field :browser_version, Ch, type: "LowCardinality(String)"
+
+    field :traffic, Ch, type: "UInt8", default: 0
   end
 
   def new(attrs) do
@@ -85,7 +87,8 @@ defmodule Plausible.ClickhouseEventV2 do
     :operating_system,
     :operating_system_version,
     :browser,
-    :browser_version
+    :browser_version,
+    :traffic
   ]
 
   def merge_session(%__MODULE__{} = event, session) do

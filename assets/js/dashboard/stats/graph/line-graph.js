@@ -21,6 +21,54 @@ const calculateMaximumY = function(dataset) {
   }
 }
 
+// Thin band along the bottom of the chart area that marks buckets with
+// suspicious (amber) or bot (red) traffic. Darker means a larger share of the
+// bucket's traffic was not human. Uses graphData.traffic_plot.
+const BAND_HEIGHT = 6
+
+export function trafficBandSegments(graphData) {
+  const trafficPlot = graphData.traffic_plot
+  if (!trafficPlot) return []
+
+  return graphData.labels.map((_label, index) => {
+    const human = graphData.plot[index] || 0
+    const suspicious = trafficPlot.suspicious?.[index] || 0
+    const bot = trafficPlot.bot?.[index] || 0
+    const nonHuman = suspicious + bot
+    if (nonHuman === 0) return null
+
+    return {
+      index,
+      kind: bot >= suspicious ? 'bot' : 'suspicious',
+      share: nonHuman / (human + nonHuman)
+    }
+  }).filter(Boolean)
+}
+
+const trafficBandPlugin = (graphData) => ({
+  id: 'trafficBand',
+  afterDatasetsDraw(chart) {
+    const segments = trafficBandSegments(graphData)
+    if (segments.length === 0) return
+
+    const { ctx, chartArea } = chart
+    const xScale = chart.scales.x
+    const count = graphData.labels.length
+    const step = count > 1 ? (xScale.getPixelForValue(1) - xScale.getPixelForValue(0)) : chartArea.width
+
+    ctx.save()
+    segments.forEach(({ index, kind, share }) => {
+      const center = xScale.getPixelForValue(index)
+      const left = Math.max(chartArea.left, center - step / 2)
+      const right = Math.min(chartArea.right, center + step / 2)
+      const alpha = 0.25 + 0.75 * Math.min(1, share)
+      ctx.fillStyle = kind === 'bot' ? `rgba(239, 68, 68, ${alpha})` : `rgba(245, 158, 11, ${alpha})`
+      ctx.fillRect(left, chartArea.bottom - BAND_HEIGHT, Math.max(1, right - left), BAND_HEIGHT)
+    })
+    ctx.restore()
+  }
+})
+
 class LineGraph extends React.Component {
   constructor(props) {
     super(props);
@@ -51,6 +99,7 @@ class LineGraph extends React.Component {
         labels: graphData.labels,
         datasets: dataSet
       },
+      plugins: [trafficBandPlugin(graphData)],
       options: {
         animation: false,
         plugins: {

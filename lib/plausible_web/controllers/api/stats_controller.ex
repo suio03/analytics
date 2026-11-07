@@ -122,12 +122,35 @@ defmodule PlausibleWeb.Api.StatsController do
         comparison_plot: comparison_result && plot_timeseries(comparison_result, metric),
         comparison_labels: comparison_result && label_timeseries(comparison_result, nil),
         present_index: present_index,
-        full_intervals: full_intervals
+        full_intervals: full_intervals,
+        traffic_plot: traffic_plot(site, query, metric, labels)
       })
     else
       {:error, message} when is_binary(message) -> bad_request(conn, message)
     end
   end
+
+  @traffic_plot_metrics [:visitors, :visits, :pageviews]
+
+  # Suspicious and bot values per graph bucket, aligned with `labels`. Drives the
+  # anomaly band under the main graph.
+  defp traffic_plot(site, query, metric, labels) when metric in @traffic_plot_metrics do
+    if query.traffic == :human do
+      Map.new([:suspicious, :bot], fn traffic ->
+        traffic_query =
+          query
+          |> Query.set(traffic: traffic)
+          |> Query.set_include(:comparisons, nil)
+
+        {rows, _, _} = Stats.timeseries(site, traffic_query, [metric])
+        values = Map.new(rows, &{&1.date, &1[metric] || 0})
+
+        {traffic, Enum.map(labels, &Map.get(values, &1, 0))}
+      end)
+    end
+  end
+
+  defp traffic_plot(_site, _query, _metric, _labels), do: nil
 
   defp plot_timeseries(timeseries, metric) do
     Enum.map(timeseries, fn row ->
@@ -207,6 +230,7 @@ defmodule PlausibleWeb.Api.StatsController do
 
     json(conn, %{
       top_stats: top_stats,
+      traffic: traffic_summary(site, query),
       interval: query.interval,
       sample_percent: sample_percent,
       with_imported_switch: with_imported_switch_info(query, comparison_query),
@@ -217,6 +241,19 @@ defmodule PlausibleWeb.Api.StatsController do
       from: Query.date_range(query).first,
       to: Query.date_range(query).last
     })
+  end
+
+  # Visitors per traffic class for the selected period and filters
+  defp traffic_summary(site, query) do
+    Map.new([:human, :suspicious, :bot], fn traffic ->
+      traffic_query =
+        query
+        |> Query.set(traffic: traffic)
+        |> Query.set_include(:comparisons, nil)
+
+      %{visitors: %{value: visitors}} = Stats.aggregate(site, traffic_query, [:visitors])
+      {traffic, visitors}
+    end)
   end
 
   defp with_imported_switch_info(%Query{period: "30m"}, _) do
@@ -1369,6 +1406,18 @@ defmodule PlausibleWeb.Api.StatsController do
     %{results: props, skip_imported_reason: query.skip_imported_reason}
   end
 
+  def suspicious_visitors(conn, params) do
+    site = conn.assigns[:site]
+    query = Query.from(site, params, debug_metadata(conn))
+
+    json(conn, Plausible.Stats.SuspiciousVisitors.list(site, query))
+  end
+
+  def current_visitors(conn, %{"split" => "traffic"}) do
+    site = conn.assigns[:site]
+    json(conn, Stats.current_visitors_by_traffic(site))
+  end
+
   def current_visitors(conn, _) do
     site = conn.assigns[:site]
     json(conn, Stats.current_visitors(site))
@@ -1585,9 +1634,14 @@ defmodule PlausibleWeb.Api.StatsController do
     if Filters.filtering_on_dimension?(query, "event:goal") do
       [:visitors, :conversion_rate, :total_visitors]
     else
-      [:visitors] ++ extra_metrics
+      [:visitors] ++ human_visitors_metric(query) ++ extra_metrics
     end
   end
+
+  # When looking at all traffic, breakdowns also show how many of the visitors
+  # were human.
+  defp human_visitors_metric(%{traffic: :all}), do: [:human_visitors]
+  defp human_visitors_metric(_query), do: []
 
   def put_combined_name_with_version(row, name_key) do
     name =

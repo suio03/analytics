@@ -20,7 +20,10 @@ defmodule Plausible.Stats.Query do
             preloaded_goals: [],
             include: Plausible.Stats.Filters.QueryParser.default_include(),
             debug_metadata: %{},
-            pagination: nil
+            pagination: nil,
+            # Which traffic class to count: :human (default), :all, :suspicious,
+            # :bot or :nonhuman (suspicious + bot). See Plausible.Ingestion.Traffic
+            traffic: :human
 
   require OpenTelemetry.Tracer, as: Tracer
   alias Plausible.Stats.{Filters, Imported, Legacy}
@@ -103,6 +106,21 @@ defmodule Plausible.Stats.Query do
     put_imported_opts(query, nil, %{})
   end
 
+  @traffic_values %{
+    "human" => :human,
+    "all" => :all,
+    "suspicious" => :suspicious,
+    "bot" => :bot,
+    "nonhuman" => :nonhuman
+  }
+
+  @doc "Parses the `traffic` URL param of the dashboard. Unknown values fall back to humans."
+  def parse_traffic(value), do: Map.get(@traffic_values, value, :human)
+
+  def put_traffic(query, params) do
+    struct!(query, traffic: parse_traffic(params["traffic"]))
+  end
+
   def put_imported_opts(query, site, params) do
     requested? = params["with_imported"] == "true" || query.include.imports
 
@@ -142,6 +160,10 @@ defmodule Plausible.Stats.Query do
         {:error, :no_imported_data}
 
       query.period in ["realtime", "30m"] ->
+        {:error, :unsupported_query}
+
+      # Imported data has no traffic classification and counts as human
+      query.traffic != :human ->
         {:error, :unsupported_query}
 
       "time:minute" in query.dimensions or "time:hour" in query.dimensions ->

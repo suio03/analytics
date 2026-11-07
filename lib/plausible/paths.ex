@@ -122,6 +122,7 @@ defmodule Plausible.Paths do
       from(e in Plausible.ClickhouseEventV2,
         where: e.site_id == ^site.id,
         where: e.timestamp >= ^first and e.timestamp < ^last,
+        where: e.traffic == 0,
         where: e.name != "engagement",
         order_by: [asc: e.session_id, asc: e.timestamp],
         limit: ^(@max_events + 1),

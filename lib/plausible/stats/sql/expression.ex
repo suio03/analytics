@@ -208,6 +208,13 @@ defmodule Plausible.Stats.SQL.Expression do
     })
   end
 
+  def event_metric(:human_visitors) do
+    wrap_alias([e], %{
+      human_visitors:
+        fragment("toUInt64(round(uniqIf(?, ? = 0) * any(_sample_factor)))", e.user_id, e.traffic)
+    })
+  end
+
   def event_metric(:visits) do
     wrap_alias([e], %{
       visits: fragment("toUInt64(round(uniq(?) * any(_sample_factor)))", e.session_id)
@@ -291,6 +298,13 @@ defmodule Plausible.Stats.SQL.Expression do
   def session_metric(:visitors, _query) do
     wrap_alias([s], %{
       visitors: fragment("toUInt64(round(uniq(?) * any(_sample_factor)))", s.user_id)
+    })
+  end
+
+  def session_metric(:human_visitors, _query) do
+    wrap_alias([s], %{
+      human_visitors:
+        fragment("toUInt64(round(uniqIf(?, ? = 0) * any(_sample_factor)))", s.user_id, s.traffic)
     })
   end
 

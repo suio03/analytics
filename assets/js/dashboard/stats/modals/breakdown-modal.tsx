@@ -13,7 +13,7 @@ import {
   useOrderBy,
   useRememberOrderBy
 } from '../../hooks/use-order-by'
-import { Metric } from '../reports/metrics'
+import { Metric, withHumanVisitors } from '../reports/metrics'
 import { DashboardQuery } from '../../query'
 import { ColumnConfiguraton } from '../../components/table'
 import { BreakdownTable } from './breakdown-table'
@@ -142,8 +142,8 @@ export default function BreakdownModal<TListItem extends { name: string }>({
           />
         )
       },
-      ...metrics.map(
-        (m): ColumnConfiguraton<TListItem> => ({
+      ...(withHumanVisitors(metrics, query) as Metric[]).map(
+        (m: Metric): ColumnConfiguraton<TListItem> => ({
           label: m.renderLabel(query),
           key: m.key,
           width: m.width,

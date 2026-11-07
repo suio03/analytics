@@ -182,7 +182,7 @@ defmodule PlausibleWeb.Api.ExternalControllerTest do
       assert pageview.pathname == "/path"
     end
 
-    test "bots and crawlers are ignored", %{conn: conn, site: site} do
+    test "bots and crawlers are recorded as bot traffic", %{conn: conn, site: site} do
       params = %{
         name: "pageview",
         url: "http://www.example.com/",
@@ -193,10 +193,11 @@ defmodule PlausibleWeb.Api.ExternalControllerTest do
       |> put_req_header("user-agent", "generic crawler")
       |> post("/api/event", params)
 
-      assert get_event(site) == nil
+      assert %{traffic: 2} = get_event(site)
+      assert %{traffic: 2, traffic_reasons: ["bot_ua"]} = get_created_session(site)
     end
 
-    test "Headless Chrome is ignored", %{conn: conn, site: site} do
+    test "Headless Chrome is recorded as bot traffic", %{conn: conn, site: site} do
       params = %{
         name: "pageview",
         url: "http://www.example.com/",
@@ -210,7 +211,77 @@ defmodule PlausibleWeb.Api.ExternalControllerTest do
       )
       |> post("/api/event", params)
 
-      assert get_event(site) == nil
+      assert %{traffic: 2} = get_event(site)
+      assert %{traffic: 2, traffic_reasons: ["headless_ua"]} = get_created_session(site)
+    end
+
+    test "Lightpanda from a cloud network is recorded as bot traffic", %{conn: conn, site: site} do
+      conn
+      |> put_req_header("user-agent", "Lightpanda/1.0")
+      |> put_req_header("x-forwarded-for", "3.0.0.1")
+      |> post("/api/event", %{name: "pageview", url: "http://example.com/", domain: site.domain})
+
+      assert %{traffic: 2} = get_event(site)
+      session = get_created_session(site)
+      assert session.traffic == 2
+      assert "headless_ua" in session.traffic_reasons
+      assert "datacenter_ip" in session.traffic_reasons
+    end
+
+    test "unidentifiable browser from a cloud network is suspicious", %{conn: conn, site: site} do
+      conn
+      |> put_req_header("user-agent", "SomethingUnknown/0.1")
+      |> put_req_header("x-forwarded-for", "3.0.0.1")
+      |> post("/api/event", %{name: "pageview", url: "http://example.com/", domain: site.domain})
+
+      assert %{traffic: 1} = get_event(site)
+
+      assert %{traffic: 1, traffic_reasons: reasons} = get_created_session(site)
+      assert Enum.sort(reasons) == ["datacenter_ip", "no_device", "unknown_ua"]
+    end
+
+    test "a regular browser from a cloud network stays human", %{conn: conn, site: site} do
+      conn
+      |> put_req_header("user-agent", @user_agent)
+      |> put_req_header("x-forwarded-for", "3.0.0.1")
+      |> post("/api/event", %{name: "pageview", url: "http://example.com/", domain: site.domain})
+
+      assert %{traffic: 0} = get_event(site)
+      assert %{traffic: 0, traffic_reasons: ["datacenter_ip"]} = get_created_session(site)
+    end
+
+    test "server side custom events without a user agent stay human", %{conn: conn, site: site} do
+      conn
+      |> put_req_header("x-forwarded-for", "3.0.0.1")
+      |> post("/api/event", %{name: "signup", url: "http://example.com/", domain: site.domain})
+
+      assert %{traffic: 0} = get_event(site)
+    end
+
+    test "tracker automation hints mark the visit", %{conn: conn, site: site} do
+      conn
+      |> put_req_header("user-agent", @user_agent)
+      |> post("/api/event", %{
+        name: "pageview",
+        url: "http://example.com/",
+        domain: site.domain,
+        a: 1
+      })
+
+      assert %{traffic: 2, traffic_reasons: ["webdriver"]} = get_created_session(site)
+    end
+
+    test "tracker interaction flag is stored on the session", %{conn: conn, site: site} do
+      conn
+      |> put_req_header("user-agent", @user_agent)
+      |> post("/api/event", %{
+        name: "Signup",
+        url: "http://example.com/",
+        domain: site.domain,
+        i: 1
+      })
+
+      assert %{interacted: 1} = get_created_session(site)
     end
 
     test "parses user_agent", %{conn: conn, site: site} do

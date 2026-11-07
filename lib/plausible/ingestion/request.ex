@@ -48,6 +48,10 @@ defmodule Plausible.Ingestion.Request do
 
     field :query_params, :map
 
+    # Tracker signals used for traffic classification, see Plausible.Ingestion.Traffic
+    field :automation, :integer, default: 0
+    field :interacted, :boolean, default: false
+
     field :timestamp, :naive_datetime
   end
 
@@ -131,7 +135,21 @@ defmodule Plausible.Ingestion.Request do
       },
       [:event_name, :hash_mode]
     )
+    |> Changeset.put_change(:automation, parse_automation(request_body["a"]))
+    |> Changeset.put_change(:interacted, request_body["i"] in [1, true, "1", "true"])
   end
+
+  defp parse_automation(value) when is_integer(value) and value >= 0 and value < 65_536,
+    do: value
+
+  defp parse_automation(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {int, ""} -> parse_automation(int)
+      _ -> 0
+    end
+  end
+
+  defp parse_automation(_), do: 0
 
   defp put_referrer(changeset, %{} = request_body) do
     referrer = request_body["r"] || request_body["referrer"]

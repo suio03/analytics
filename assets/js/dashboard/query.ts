@@ -39,6 +39,11 @@ export type Filter = [FilterOperator, FilterKey, FilterClause[]]
  * */
 export type FilterClauseLabels = Record<string, unknown>
 
+/** Which traffic class the dashboard counts. See Plausible.Ingestion.Traffic */
+export type TrafficClass = 'human' | 'all' | 'suspicious' | 'bot'
+
+export const TRAFFIC_CLASSES: TrafficClass[] = ['human', 'all', 'suspicious', 'bot']
+
 export const queryDefaultValue = {
   period: '30d' as QueryPeriod,
   comparison: null as ComparisonMode | null,
@@ -50,7 +55,8 @@ export const queryDefaultValue = {
   compare_to: null as Dayjs | null,
   filters: [] as Filter[],
   labels: {} as FilterClauseLabels,
-  with_imported: true
+  with_imported: true,
+  traffic: 'human' as TrafficClass
 }
 
 export type DashboardQuery = typeof queryDefaultValue

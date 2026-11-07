@@ -262,6 +262,32 @@ defmodule Plausible.Session.CacheStoreTest do
     assert session.events == 2
   end
 
+  test "keeps the traffic class of the session and records interaction", %{buffer: buffer} do
+    timestamp = Timex.now()
+    event1 = build(:event, name: "pageview", timestamp: timestamp |> Timex.shift(seconds: -10))
+    event2 = %{event1 | timestamp: timestamp}
+    event3 = %{event1 | timestamp: timestamp}
+
+    CacheStore.on_event(
+      event1,
+      %{traffic: 1, traffic_reasons: ["unknown_ua", "no_device"]},
+      nil,
+      buffer
+    )
+
+    assert_receive({:buffer, :insert, [[%{traffic: 1, interacted: 0}]]})
+
+    CacheStore.on_event(event2, %{traffic: 0, interacted: true}, nil, buffer)
+    assert_receive({:buffer, :insert, [[_negative_record, session]]})
+    assert session.traffic == 1
+    assert session.traffic_reasons == ["unknown_ua", "no_device"]
+    assert session.interacted == 1
+
+    CacheStore.on_event(event3, %{interacted: false}, nil, buffer)
+    assert_receive({:buffer, :insert, [[_negative_record, session]]})
+    assert session.interacted == 1
+  end
+
   test "does not update session counters on pageleave event", %{buffer: buffer} do
     now = Timex.now()
     pageview = build(:pageview, timestamp: Timex.shift(now, seconds: -10))

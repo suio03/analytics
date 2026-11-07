@@ -9,6 +9,7 @@ defmodule Plausible.Stats.Metrics do
 
   @all_metrics [
                  :visitors,
+                 :human_visitors,
                  :visits,
                  :pageviews,
                  :views_per_visit,

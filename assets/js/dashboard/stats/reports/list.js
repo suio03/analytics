@@ -10,6 +10,7 @@ import classNames from 'classnames';
 import { trimURL } from '../../util/url';
 import { cleanLabels, replaceFilterByPrefix, isRealTimeDashboard, hasGoalFilter, plainFilterText } from '../../util/filters';
 import { useQueryContext } from '../../query-context';
+import { withHumanVisitors } from './metrics';
 
 const MAX_ITEMS = 9
 export const MIN_HEIGHT = 380
@@ -155,7 +156,7 @@ export default function ListReport({ keyLabel, metrics, colMinWidth = COL_MIN_WI
   // metrics based on filters and existing data, this function validates that the metrics
   // we want to display are actually there in the API response.
   function getAvailableMetrics() {
-    return metrics.filter((metric) => {
+    return withHumanVisitors(metrics, query).filter((metric) => {
       return state.list.some((listItem) => listItem[metric.key] != null)
     })
   }

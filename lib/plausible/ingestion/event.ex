@@ -117,6 +117,7 @@ defmodule Plausible.Ingestion.Event do
       put_geolocation: &put_geolocation/2,
       drop_shield_rule_country: &drop_shield_rule_country/2,
       put_user_agent: &put_user_agent/2,
+      put_traffic: &put_traffic/2,
       put_basic_info: &put_basic_info/2,
       put_referrer: &put_referrer/2,
       put_utm_tags: &put_utm_tags/2,
@@ -218,13 +219,9 @@ defmodule Plausible.Ingestion.Event do
   end
 
   defp put_user_agent(%__MODULE__{} = event, _context) do
+    # Bots are no longer dropped here: `put_traffic/2` classifies them and the
+    # dashboard filters them out by default.
     case parse_user_agent(event.request) do
-      %UAInspector.Result{client: %UAInspector.Result.Client{name: "Headless Chrome"}} ->
-        drop(event, :bot)
-
-      %UAInspector.Result.Bot{} ->
-        drop(event, :bot)
-
       %UAInspector.Result{} = user_agent ->
         update_session_attrs(event, %{
           operating_system: os_name(user_agent),
@@ -237,6 +234,17 @@ defmodule Plausible.Ingestion.Event do
       _any ->
         event
     end
+  end
+
+  defp put_traffic(%__MODULE__{} = event, _context) do
+    {traffic, reasons} =
+      Plausible.Ingestion.Traffic.classify(event.request, parse_user_agent(event.request))
+
+    update_session_attrs(event, %{
+      traffic: traffic,
+      traffic_reasons: reasons,
+      interacted: event.request.interacted == true
+    })
   end
 
   defp put_basic_info(%__MODULE__{} = event, _context) do

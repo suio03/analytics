@@ -17,7 +17,9 @@ export default function CurrentVisitors({ tooltipBoundary }) {
 
   const updateCount = useCallback(() => {
     api
-      .get(`/api/stats/${encodeURIComponent(site.domain)}/current-visitors`)
+      .get(`/api/stats/${encodeURIComponent(site.domain)}/current-visitors`, {}, {
+        split: 'traffic'
+      })
       .then((res) => setCurrentVisitors(res))
   }, [site.domain])
 
@@ -33,9 +35,19 @@ export default function CurrentVisitors({ tooltipBoundary }) {
     updateCount()
   }, [query, updateCount])
 
+  const humans = currentVisitors?.human ?? 0
+  const nonHumans =
+    (currentVisitors?.suspicious ?? 0) + (currentVisitors?.bot ?? 0)
+
   function tooltipInfo() {
     return (
       <div>
+        {nonHumans > 0 && (
+          <p className="whitespace-nowrap text-small">
+            Not counted: {currentVisitors.suspicious} suspicious,{' '}
+            {currentVisitors.bot} bot{currentVisitors.bot === 1 ? '' : 's'}
+          </p>
+        )}
         <p className="whitespace-nowrap text-small">
           Last updated{' '}
           <SecondsSinceLastLoad lastLoadTimestamp={lastLoadTimestamp} />s ago
@@ -61,10 +73,15 @@ export default function CurrentVisitors({ tooltipBoundary }) {
           >
             <circle cx="8" cy="8" r="8" />
           </svg>
-          {currentVisitors}{' '}
+          {humans}{' '}
           <span className="hidden sm:inline-block">
-            current visitor{currentVisitors === 1 ? '' : 's'}
+            current visitor{humans === 1 ? '' : 's'}
           </span>
+          {nonHumans > 0 && (
+            <span className="ml-1 font-normal text-gray-400 dark:text-gray-500">
+              +{nonHumans} bot{nonHumans === 1 ? '' : 's'}
+            </span>
+          )}
         </AppNavigationLink>
       </Tooltip>
     )

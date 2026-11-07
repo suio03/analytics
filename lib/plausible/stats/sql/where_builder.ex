@@ -48,7 +48,8 @@ defmodule Plausible.Stats.SQL.WhereBuilder do
 
     dynamic(
       [e],
-      e.site_id == ^site.id and e.timestamp >= ^first_datetime and e.timestamp <= ^last_datetime
+      e.site_id == ^site.id and e.timestamp >= ^first_datetime and e.timestamp <= ^last_datetime and
+        ^filter_traffic(query)
     )
   end
 
@@ -71,9 +72,17 @@ defmodule Plausible.Stats.SQL.WhereBuilder do
       s.site_id == ^site.id and
         s.start >= ^NaiveDateTime.add(first_datetime, -7, :day) and
         s.timestamp >= ^first_datetime and
-        s.start <= ^last_datetime
+        s.start <= ^last_datetime and
+        ^filter_traffic(query)
     )
   end
+
+  @doc "Condition restricting rows to the traffic class requested by the query"
+  def filter_traffic(%Query{traffic: :all}), do: true
+  def filter_traffic(%Query{traffic: :nonhuman}), do: dynamic([t], t.traffic > 0)
+  def filter_traffic(%Query{traffic: :suspicious}), do: dynamic([t], t.traffic == 1)
+  def filter_traffic(%Query{traffic: :bot}), do: dynamic([t], t.traffic == 2)
+  def filter_traffic(%Query{}), do: dynamic([t], t.traffic == 0)
 
   defp add_filter(table, query, [:not, filter]) do
     dynamic([e], not (^add_filter(table, query, filter)))

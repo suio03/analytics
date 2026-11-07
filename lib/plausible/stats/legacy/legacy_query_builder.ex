@@ -21,6 +21,7 @@ defmodule Plausible.Stats.Legacy.QueryBuilder do
       |> put_parsed_filters(params)
       |> put_preloaded_goals(site)
       |> put_order_by(params)
+      |> Query.put_traffic(params)
       |> Query.put_experimental_reduced_joins(site, params)
       |> Query.put_imported_opts(site, params)
 

@@ -72,6 +72,11 @@ defmodule Plausible.ClickhouseSessionV2 do
     field :browser_version, Ch, type: "LowCardinality(String)"
     field :timestamp, :naive_datetime
 
+    # 0 = human, 1 = suspicious, 2 = bot. See Plausible.Ingestion.Traffic
+    field :traffic, Ch, type: "UInt8", default: 0
+    field :traffic_reasons, Ch, type: "Array(LowCardinality(String))", default: []
+    field :interacted, Ch, type: "UInt8", default: 0
+
     field :transferred_from, :string
   end
 

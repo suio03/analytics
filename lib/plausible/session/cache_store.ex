@@ -40,7 +40,7 @@ defmodule Plausible.Session.CacheStore do
         found_session = find_session(event, event.user_id) || find_session(event, prev_user_id)
 
         if found_session do
-          updated_session = update_session(found_session, event)
+          updated_session = update_session(found_session, event, session_attributes)
           buffer_insert.([%{found_session | sign: -1}, %{updated_session | sign: 1}])
           persist_session(updated_session)
         else
@@ -74,7 +74,7 @@ defmodule Plausible.Session.CacheStore do
     session
   end
 
-  defp update_session(session, event) do
+  defp update_session(session, event, session_attributes) do
     %{
       session
       | user_id: event.user_id,
@@ -96,8 +96,13 @@ defmodule Plausible.Session.CacheStore do
         duration: Timex.diff(event.timestamp, session.start, :second) |> abs,
         pageviews:
           if(event.name == "pageview", do: session.pageviews + 1, else: session.pageviews),
-        events: session.events + 1
+        events: session.events + 1,
+        interacted: max(session.interacted || 0, interacted(session_attributes))
     }
+  end
+
+  defp interacted(session_attributes) do
+    if Map.get(session_attributes, :interacted) == true, do: 1, else: 0
   end
 
   defp new_session_from_event(event, session_attributes) do
@@ -131,6 +136,9 @@ defmodule Plausible.Session.CacheStore do
       operating_system_version: Map.get(session_attributes, :operating_system_version),
       browser: Map.get(session_attributes, :browser),
       browser_version: Map.get(session_attributes, :browser_version),
+      traffic: Map.get(session_attributes, :traffic, 0),
+      traffic_reasons: Map.get(session_attributes, :traffic_reasons, []),
+      interacted: interacted(session_attributes),
       timestamp: event.timestamp,
       start: event.timestamp,
       "entry_meta.key": Map.get(event, :"meta.key"),

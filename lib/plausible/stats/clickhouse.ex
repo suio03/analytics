@@ -90,6 +90,7 @@ defmodule Plausible.Stats.Clickhouse do
         # Note: This query intentionally uses session end timestamp to get currently active users
         where: s.timestamp >= ^first_datetime and s.start < ^last_datetime,
         where: s.referrer_source != "",
+        where: s.traffic == 0,
         group_by: s.referrer_source,
         order_by: [desc: uniq(s.user_id), asc: s.referrer_source],
         limit: ^limit,
@@ -236,6 +237,7 @@ defmodule Plausible.Stats.Clickhouse do
 
     from e in "events_v2",
       where: e.site_id in ^Enum.map(sites, & &1.id),
+      where: e.traffic == 0,
       where: ^cutoff_times_condition
   end
 

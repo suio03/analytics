@@ -165,3 +165,21 @@ export const createExitRate = (props) => {
 export function renderNumberWithTooltip(value) {
   return <span tooltip={value}>{numberFormatter(value)}</span>
 }
+export const createHumanVisitors = (props = {}) => {
+  const renderValue = renderNumberWithTooltip
+  const renderLabel = (_query) => "Humans"
+  return new Metric({width: 'w-24', ...props, key: "human_visitors", renderValue, renderLabel, sortable: false})
+}
+
+// When the dashboard shows all traffic, the API also returns how many of the
+// visitors were human. Adds that column right after the visitors column.
+export const withHumanVisitors = (metrics, query) => {
+  if (query?.traffic !== 'all' || hasGoalFilter(query)) return metrics
+  if (metrics.some((metric) => metric.key === 'human_visitors')) return metrics
+
+  const visitorsIndex = metrics.findIndex((metric) => metric.key === 'visitors')
+  if (visitorsIndex === -1) return metrics
+
+  const humans = createHumanVisitors({ meta: { hiddenOnMobile: true } })
+  return [...metrics.slice(0, visitorsIndex + 1), humans, ...metrics.slice(visitorsIndex + 1)]
+}

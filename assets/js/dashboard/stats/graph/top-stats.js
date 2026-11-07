@@ -11,6 +11,8 @@ import { getGraphableMetrics } from './graph-util'
 import { useQueryContext } from '../../query-context'
 import { useSiteContext } from '../../site-context'
 import { useLastLoadContext } from '../../last-load-context'
+import { useAppNavigate } from '../../navigation/use-app-navigate'
+import { suspiciousVisitorsRoute } from '../../router'
 
 function Maybe({ condition, children }) {
   if (condition) {
@@ -86,6 +88,7 @@ function topStatNumberLong(name, value) {
 
 export default function TopStats({ data, onMetricUpdate, tooltipBoundary }) {
   const { query } = useQueryContext()
+  const navigate = useAppNavigate()
   const lastLoadTimestamp = useLastLoadContext()
   const site = useSiteContext()
 
@@ -111,6 +114,12 @@ export default function TopStats({ data, onMetricUpdate, tooltipBoundary }) {
           </div>
         )}
 
+        {isVisitorsStat(stat) && nonHumanCount() > 0 && (
+          <p className="whitespace-nowrap font-normal text-xs">
+            Humans only. {humanShare()}% of all visitors were human.
+          </p>
+        )}
+
         {stat.name === 'Current visitors' && (
           <p className="font-normal text-xs">
             Last updated{' '}
@@ -118,6 +127,53 @@ export default function TopStats({ data, onMetricUpdate, tooltipBoundary }) {
           </p>
         )}
       </div>
+    )
+  }
+
+  function isVisitorsStat(stat) {
+    return (
+      stat.graph_metric === 'visitors' &&
+      query.traffic === 'human' &&
+      !!data?.traffic
+    )
+  }
+
+  function nonHumanCount() {
+    return (data?.traffic?.suspicious ?? 0) + (data?.traffic?.bot ?? 0)
+  }
+
+  function humanShare() {
+    const human = data?.traffic?.human ?? 0
+    const total = human + nonHumanCount()
+    return total === 0 ? 100 : Math.round((human / total) * 100)
+  }
+
+  function renderTrafficSubline(stat) {
+    if (!isVisitorsStat(stat) || nonHumanCount() === 0) return null
+    const { suspicious, bot } = data.traffic
+
+    return (
+      <button
+        type="button"
+        className="block text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap hover:underline"
+        data-testid="traffic-subline"
+        onClick={(e) => {
+          e.stopPropagation()
+          navigate({ path: suspiciousVisitorsRoute.path, search: (search) => search })
+        }}
+      >
+        {suspicious > 0 && (
+          <span className="text-amber-600 dark:text-amber-400">
+            +{numberFormatter(suspicious)} suspicious
+          </span>
+        )}
+        {suspicious > 0 && bot > 0 && ' · '}
+        {bot > 0 && (
+          <span className="text-red-500 dark:text-red-400">
+            +{numberFormatter(bot)} bot{bot === 1 ? '' : 's'}
+          </span>
+        )}
+      </button>
     )
   }
 
@@ -211,6 +267,7 @@ export default function TopStats({ data, onMetricUpdate, tooltipBoundary }) {
                 {formatDateRange(site, data.from, data.to)}
               </p>
             </Maybe>
+            {renderTrafficSubline(stat)}
           </div>
 
           <Maybe condition={query.comparison}>

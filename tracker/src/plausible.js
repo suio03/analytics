@@ -12,6 +12,33 @@
   var endpoint = scriptEl.getAttribute('data-api') || defaultEndpoint(scriptEl)
   var dataDomain = scriptEl.getAttribute('data-domain')
 
+  // Set once the visitor clicks, taps, types or scrolls with a wheel. Sent as
+  // `i` so the server can tell sessions with real interaction apart.
+  var interacted = false
+  var interactionEvents = ['pointerdown', 'keydown', 'touchstart', 'wheel']
+  function onInteraction() {
+    interacted = true
+    for (var j = 0; j < interactionEvents.length; j++) {
+      window.removeEventListener(interactionEvents[j], onInteraction, true)
+    }
+  }
+  for (var k = 0; k < interactionEvents.length; k++) {
+    window.addEventListener(interactionEvents[k], onInteraction, {capture: true, passive: true})
+  }
+
+  // Automation signals, sent as the `a` bitmask on pageviews and classified
+  // on the server (Plausible.Ingestion.Traffic) instead of dropping the event.
+  function automationSignals() {
+    if (window.__plausible) return 0
+    var nav = window.navigator
+    var bits = 0
+    if (nav.webdriver) bits |= 1
+    if (window._phantom || window.callPhantom || window.__nightmare || window.domAutomation || window.domAutomationController) bits |= 2
+    if (window.outerWidth === 0 && window.outerHeight === 0) bits |= 4
+    if (nav.languages && nav.languages.length === 0) bits |= 8
+    return bits
+  }
+
   function onIgnoredEvent(reason, options) {
     if (reason) console.warn('Ignoring Event: ' + reason);
     options && options.callback && options.callback()
@@ -53,6 +80,7 @@
       d: dataDomain,
       u: url,
     }
+    if (interacted) payload.i = 1
 
     {{#if hash}}
     payload.h = 1
@@ -81,7 +109,7 @@
     if (/^localhost$|^127(\.[0-9]+){0,2}\.[0-9]+$|^\[::1?\]$/.test(location.hostname) || location.protocol === 'file:') {
       return onIgnoredEvent('localhost', options)
     }
-    if ((window._phantom || window.__nightmare || window.navigator.webdriver || window.Cypress) && !window.__plausible) {
+    if (window.Cypress && !window.__plausible) {
       return onIgnoredEvent(null, options)
     }
     {{/unless}}
@@ -154,6 +182,12 @@
     {{#if hash}}
     payload.h = 1
     {{/if}}
+
+    if (eventName === 'pageview') {
+      var automation = automationSignals()
+      if (automation) payload.a = automation
+    }
+    if (interacted) payload.i = 1
 
     var request = new XMLHttpRequest();
     request.open('POST', endpoint, true);

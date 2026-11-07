@@ -39,6 +39,11 @@ defmodule Plausible.Stats do
     CurrentVisitors.current_visitors(site, duration)
   end
 
+  def current_visitors_by_traffic(site, duration \\ Duration.new!(minute: -5)) do
+    include_sentry_replay_info()
+    CurrentVisitors.current_visitors_by_traffic(site, duration)
+  end
+
   on_ee do
     def funnel(site, query, funnel) do
       include_sentry_replay_info()

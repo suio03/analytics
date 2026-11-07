@@ -48,7 +48,11 @@ const buildTooltipData = function(query, graphData, metric, tooltipModel) {
   const formattedValue = metricFormatter(value)
   const formattedComparisonValue = comparisonData && metricFormatter(comparisonValue)
 
-  return { label, formattedValue, comparisonLabel, formattedComparisonValue, comparisonDifference }
+  const index = data?.dataIndex
+  const suspicious = index !== undefined ? (graphData.traffic_plot?.suspicious?.[index] || 0) : 0
+  const bots = index !== undefined ? (graphData.traffic_plot?.bot?.[index] || 0) : 0
+
+  return { label, formattedValue, comparisonLabel, formattedComparisonValue, comparisonDifference, suspicious, bots, metricFormatter }
 }
 
 export default function GraphTooltip(graphData, metric, query) {
@@ -111,6 +115,16 @@ export default function GraphTooltip(graphData, metric, query) {
               <span class="text-base font-bold">${tooltipData.formattedComparisonValue}</span>
             </div>` : ""}
           </div>
+
+          ${tooltipData.suspicious || tooltipData.bots ?
+          `<div class="flex flex-row justify-between items-center text-sm text-gray-300 mt-1">
+            <span class="mr-4">Not counted</span>
+            <span>
+              ${tooltipData.suspicious ? `<span class="text-amber-400">${tooltipData.metricFormatter(tooltipData.suspicious)} suspicious</span>` : ''}
+              ${tooltipData.suspicious && tooltipData.bots ? ' · ' : ''}
+              ${tooltipData.bots ? `<span class="text-red-400">${tooltipData.metricFormatter(tooltipData.bots)} bots</span>` : ''}
+            </span>
+          </div>` : ''}
 
           ${graphData.interval === "month" ? `<span class="font-semibold italic">Click to view month</span>` : ""}
           ${graphData.interval === "day" ? `<span class="font-semibold italic">Click to view day</span>` : ""}

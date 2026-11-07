@@ -17,7 +17,9 @@ import {
   Filter,
   FilterClauseLabels,
   queryDefaultValue,
-  postProcessFilters
+  postProcessFilters,
+  TrafficClass,
+  TRAFFIC_CLASSES
 } from './query'
 
 const queryContextDefaultValue = {
@@ -52,6 +54,7 @@ export default function QueryContextProvider({
     period,
     to,
     with_imported,
+    traffic,
     ...otherSearch
   } = useMemo(() => parseSearch(location.search), [location.search])
 
@@ -94,6 +97,9 @@ export default function QueryContextProvider({
       with_imported: [true, false].includes(with_imported as boolean)
         ? (with_imported as boolean)
         : defaultValues.with_imported,
+      traffic: TRAFFIC_CLASSES.includes(traffic as TrafficClass)
+        ? (traffic as TrafficClass)
+        : defaultValues.traffic,
       filters: Array.isArray(filters)
         ? postProcessFilters(filters as Filter[])
         : defaultValues.filters,
@@ -111,6 +117,7 @@ export default function QueryContextProvider({
     period,
     to,
     with_imported,
+    traffic,
     site
   ])
 

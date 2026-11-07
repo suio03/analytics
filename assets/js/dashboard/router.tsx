@@ -24,6 +24,7 @@ import ScreenSizesModal from './stats/modals/devices/screen-sizes'
 import PropsModal from './stats/modals/props'
 import ConversionsModal from './stats/modals/conversions'
 import FilterModal from './stats/modals/filter-modal'
+import SuspiciousVisitorsModal from './stats/modals/suspicious-visitors'
 import QueryContextProvider from './query-context'
 import { DashboardKeybinds } from './dashboard-keybinds'
 import LastLoadContextProvider from './last-load-context'
@@ -101,6 +102,11 @@ export const referrersGoogleRoute = {
 export const topPagesRoute = {
   path: 'pages',
   element: <PagesModal />
+}
+
+export const suspiciousVisitorsRoute = {
+  path: 'suspicious-visitors',
+  element: <SuspiciousVisitorsModal />
 }
 
 export const entryPagesRoute = {
@@ -225,6 +231,7 @@ export function createAppRouter(site: PlausibleSite) {
           conversionsRoute,
           customPropsRoute,
           filterRoute,
+          suspiciousVisitorsRoute,
           { path: '*', element: null }
         ]
       }

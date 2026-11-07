@@ -5,6 +5,7 @@ import * as storage from '../../util/storage';
 import { getGraphableMetrics } from './graph-util';
 import TopStats from './top-stats';
 import { IntervalPicker, getCurrentInterval } from './interval-picker';
+import { TrafficPicker } from './traffic-picker';
 import StatsExport from './stats-export';
 import WithImportedSwitch from './with-imported-switch';
 import SamplingNotice from './sampling-notice';
@@ -176,6 +177,7 @@ export default function VisitorGraph({ updateImportedDataInView }) {
                 disabled={!topStatData.with_imported_switch.togglable}
               />
             }
+            <TrafficPicker />
             <IntervalPicker onIntervalUpdate={onIntervalUpdate} />
           </div>
           <LineGraphWithRouter
