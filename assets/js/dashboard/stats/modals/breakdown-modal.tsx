@@ -198,6 +198,7 @@ const NameCell = <TListItem extends { name: string }>({
     {typeof renderIcon === 'function' && renderIcon(item)}
     <FilterLink
       path={rootRoute.path}
+      replace
       filterInfo={getFilterInfo(item)}
       onClick={undefined}
       extraClass={undefined}

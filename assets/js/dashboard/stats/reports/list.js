@@ -18,7 +18,7 @@ const ROW_GAP_HEIGHT = 4
 const DATA_CONTAINER_HEIGHT = (ROW_HEIGHT + ROW_GAP_HEIGHT) * (MAX_ITEMS - 1) + ROW_HEIGHT
 const COL_MIN_WIDTH = 70
 
-export function FilterLink({ path, filterInfo, onClick, children, extraClass }) {
+export function FilterLink({ path, filterInfo, onClick, children, extraClass, replace }) {
   const { query } = useQueryContext();
   const className = classNames(`${extraClass}`, { 'hover:underline': !!filterInfo })
 
@@ -33,6 +33,7 @@ export function FilterLink({ path, filterInfo, onClick, children, extraClass }) 
         className={className}
         path={path}
         onClick={onClick}
+        replace={replace}
         search={(search) => ({...search, filters: newFilters, labels: newLabels})}
       >
         {children}

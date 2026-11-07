@@ -27,6 +27,7 @@ import FilterModal from './stats/modals/filter-modal'
 import QueryContextProvider from './query-context'
 import { DashboardKeybinds } from './dashboard-keybinds'
 import LastLoadContextProvider from './last-load-context'
+import { useTrackDashboardRoot } from './navigation/modal-history'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -38,6 +39,7 @@ const queryClient = new QueryClient({
 })
 
 function DashboardElement() {
+  useTrackDashboardRoot()
   return (
     <QueryClientProvider client={queryClient}>
       <QueryContextProvider>

@@ -1,13 +1,13 @@
 import React from "react";
 import { createPortal } from "react-dom";
-import { NavigateKeybind } from '../../keybinding'
-import { rootRoute } from "../../router";
-import { useAppNavigate } from "../../navigation/use-app-navigate";
+import { Keybind, isModifierPressed, isTyping } from '../../keybinding'
+import { useCloseModal } from "../../navigation/modal-history";
 
 // This corresponds to the 'md' breakpoint on TailwindCSS.
 const MD_WIDTH = 768;
 // We assume that the dashboard is by default opened on a desktop. This is also a fall-back for when, for any reason, the width is not ascertained.
 const DEFAULT_WIDTH = 1080;
+const IGNORE_ESCAPE_WHEN = [isModifierPressed, isTyping];
 
 
 class Modal extends React.Component {
@@ -49,10 +49,7 @@ class Modal extends React.Component {
   }
 
   close() {
-    this.props.navigate({
-      path: rootRoute.path,
-      search: (search) => search,
-    })
+    this.props.closeModal()
   }
 
   /**
@@ -77,7 +74,7 @@ class Modal extends React.Component {
   render() {
     return createPortal(
       <>
-        <NavigateKeybind keyboardKey="Escape" type="keyup" navigateProps={{ path: rootRoute.path, search: (search) => search }} />
+        <Keybind keyboardKey="Escape" type="keyup" handler={this.props.closeModal} shouldIgnoreWhen={IGNORE_ESCAPE_WHEN} />
         <div className="modal is-open" onClick={this.props.onClick}>
           <div className="modal__overlay">
             <button className="modal__close"></button>
@@ -98,6 +95,6 @@ class Modal extends React.Component {
 }
 
 export default function ModalWithRouting(props) {
-  const navigate = useAppNavigate()
-  return <Modal {...props} navigate={navigate} />
+  const closeModal = useCloseModal()
+  return <Modal {...props} closeModal={closeModal} />
 }

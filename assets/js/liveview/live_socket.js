@@ -20,6 +20,33 @@ if (csrfToken && websocketUrl) {
       })
     }
   }
+  // LiveView sets history.scrollRestoration = "manual", so coming back to a
+  // long list (e.g. /sites after opening a dashboard) always starts at the top.
+  // Remember the scroll position per URL for this tab and restore it on mount.
+  Hooks.RestoreScroll = {
+    mounted() {
+      this.key = `scroll:${window.location.pathname}${window.location.search}`
+      try {
+        const saved = parseInt(window.sessionStorage.getItem(this.key), 10)
+        if (saved > 0) requestAnimationFrame(() => window.scrollTo(0, saved))
+      } catch (_e) { /* storage unavailable */ }
+
+      let timer = null
+      this.onScroll = () => {
+        clearTimeout(timer)
+        timer = setTimeout(() => {
+          try { window.sessionStorage.setItem(this.key, String(window.scrollY)) } catch (_e) { /* ignore */ }
+        }, 100)
+      }
+      window.addEventListener("scroll", this.onScroll, { passive: true })
+    },
+    updated() {
+      this.key = `scroll:${window.location.pathname}${window.location.search}`
+    },
+    destroyed() {
+      window.removeEventListener("scroll", this.onScroll)
+    }
+  }
   let Uploaders = {}
   Uploaders.S3 = function (entries, onViewError) {
     entries.forEach(entry => {

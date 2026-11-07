@@ -14,6 +14,9 @@ defmodule PlausibleWeb.Live.Sites do
   alias Plausible.Sites
   alias Plausible.Site.Memberships.Invitations
 
+  # Default Scrivener page is 24; owners with many sites shouldn't have to page.
+  @page_size 60
+
   def mount(params, _session, socket) do
     uri =
       ("/sites?" <> URI.encode_query(Map.take(params, ["filter_text"])))
@@ -54,6 +57,8 @@ defmodule PlausibleWeb.Live.Sites do
     <div
       x-data={"{selectedInvitation: null, invitationOpen: false, invitations: #{Enum.map(@invitations, &({&1.invitation.invitation_id, &1})) |> Enum.into(%{}) |> Jason.encode!}}"}
       x-on:keydown.escape.window="invitationOpen = false"
+      id="sites-index"
+      phx-hook="RestoreScroll"
       class="container pt-6"
     >
       <PlausibleWeb.Live.Components.Visitors.gradient_defs />
@@ -630,7 +635,9 @@ defmodule PlausibleWeb.Live.Sites do
 
   defp load_sites(%{assigns: assigns} = socket) do
     sites =
-      Sites.list_with_invitations(assigns.current_user, assigns.params,
+      Sites.list_with_invitations(
+        assigns.current_user,
+        Map.put_new(assigns.params, "page_size", @page_size),
         filter_by_domain: assigns.filter_text
       )
 
