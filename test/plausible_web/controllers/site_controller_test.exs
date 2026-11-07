@@ -102,7 +102,7 @@ defmodule PlausibleWeb.SiteControllerTest do
     end
 
     test "paginates sites", %{conn: initial_conn, user: user} do
-      for i <- 1..25 do
+      for i <- 1..61 do
         insert(:site,
           members: [user],
           domain: "paginated-site#{String.pad_leading("#{i}", 2, "0")}.example.com"
