@@ -82,7 +82,7 @@
         </thead>
         <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
           <tr :for={r <- @report["sources"]}>
-            <td class="px-5 py-3 font-medium break-all"><%= r["key"] %></td>
+            <td class="px-5 py-3 font-medium"><.source_label key={r["key"]} /></td>
             <td class="px-4 py-3 text-right"><%= r["signups"] %></td>
             <td class="px-4 py-3 text-right"><%= usd(r["freeUsd"]) %></td>
             <td class="px-4 py-3 text-right"><%= per(r["freePerSignup"]) %></td>

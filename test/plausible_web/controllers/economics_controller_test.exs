@@ -41,6 +41,60 @@ defmodule PlausibleWeb.EconomicsControllerTest do
     ],
     "sources" => [
       %{
+        "key" => "(before tracking)",
+        "signups" => 3,
+        "buyers" => 0,
+        "freeUsd" => 0,
+        "revenue" => 0,
+        "payback" => nil,
+        "freePerSignup" => 0
+      },
+      %{
+        "key" => "(direct or unknown)",
+        "signups" => 3,
+        "buyers" => 0,
+        "freeUsd" => 0,
+        "revenue" => 0,
+        "payback" => nil,
+        "freePerSignup" => 0
+      },
+      %{
+        "key" => "email",
+        "signups" => 3,
+        "buyers" => 0,
+        "freeUsd" => 0,
+        "revenue" => 0,
+        "payback" => nil,
+        "freePerSignup" => 0
+      },
+      %{
+        "key" => "google",
+        "signups" => 3,
+        "buyers" => 0,
+        "freeUsd" => 0,
+        "revenue" => 0,
+        "payback" => nil,
+        "freePerSignup" => 0
+      },
+      %{
+        "key" => "search.brave.com",
+        "signups" => 3,
+        "buyers" => 0,
+        "freeUsd" => 0,
+        "revenue" => 0,
+        "payback" => nil,
+        "freePerSignup" => 0
+      },
+      %{
+        "key" => "newref",
+        "signups" => 3,
+        "buyers" => 0,
+        "freeUsd" => 0,
+        "revenue" => 0,
+        "payback" => nil,
+        "freePerSignup" => 0
+      },
+      %{
         "key" => "sunodownloader",
         "signups" => 55,
         "buyers" => 0,
@@ -75,6 +129,10 @@ defmodule PlausibleWeb.EconomicsControllerTest do
 
     html = get(conn, "/economics.example/economics?days=90") |> html_response(200)
     assert html =~ "sunodownloader"
+    assert html =~ "/favicon/sources/sunodownloader.io"
+    assert html =~ "/favicon/sources/search.brave.com"
+    assert html =~ "Before source tracking"
+    assert html =~ "newref"
     assert html =~ "$18.27"
     assert html =~ "5.0×"
     refute html =~ "never-render-this-token"
