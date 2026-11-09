@@ -5,8 +5,19 @@ defmodule Plausible.Ingestion.TrafficTest do
 
   @chrome "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
+  @old_chrome "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
+  @old_chrome_mobile "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Mobile Safari/537.36"
+  @nov_2026 ~N[2026-11-09 03:00:00]
+
   defp classify(attrs) do
-    request = struct!(Request, Map.merge(%{event_name: "pageview", automation: 0}, attrs))
+    defaults = %{
+      event_name: "pageview",
+      automation: 0,
+      referrer: "https://www.google.com/",
+      timestamp: ~N[2024-11-20 00:00:00]
+    }
+
+    request = struct!(Request, Map.merge(defaults, attrs))
     ua = if request.user_agent, do: UAInspector.parse(request.user_agent)
     Traffic.classify(request, ua)
   end
@@ -52,6 +63,42 @@ defmodule Plausible.Ingestion.TrafficTest do
 
     test "pageviews without user agent are suspicious" do
       assert {1, ["unknown_ua", "no_device"]} = classify(%{user_agent: nil})
+    end
+
+    test "estimates the current Chrome major from the release cadence" do
+      assert Traffic.current_chrome_major(~D[2024-11-12]) == 131
+      assert Traffic.current_chrome_major(~D[2026-11-09]) == 156
+      assert Traffic.outdated_chrome_major(~D[2026-11-09]) == 150
+    end
+
+    test "an outdated desktop Chrome landing without referrer is suspicious" do
+      assert {1, ["outdated_browser", "no_referrer"]} =
+               classify(%{user_agent: @old_chrome, referrer: nil, timestamp: @nov_2026})
+    end
+
+    test "an outdated desktop Chrome with a referrer or campaign stays human" do
+      assert {0, ["outdated_browser"]} =
+               classify(%{user_agent: @old_chrome, timestamp: @nov_2026})
+
+      assert {0, ["outdated_browser"]} =
+               classify(%{
+                 user_agent: @old_chrome,
+                 referrer: nil,
+                 query_params: %{"utm_source" => "newsletter"},
+                 timestamp: @nov_2026
+               })
+    end
+
+    test "recent desktop Chrome and mobile Chrome are not outdated" do
+      assert {0, []} =
+               classify(%{
+                 user_agent: @old_chrome,
+                 referrer: nil,
+                 timestamp: ~N[2026-05-20 00:00:00]
+               })
+
+      assert {0, []} =
+               classify(%{user_agent: @old_chrome_mobile, referrer: nil, timestamp: @nov_2026})
     end
   end
 

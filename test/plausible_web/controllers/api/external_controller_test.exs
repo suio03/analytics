@@ -241,8 +241,13 @@ defmodule PlausibleWeb.Api.ExternalControllerTest do
     end
 
     test "a regular browser from a cloud network stays human", %{conn: conn, site: site} do
+      major = Plausible.Ingestion.Traffic.current_chrome_major(Date.utc_today())
+
+      current_chrome =
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/#{major}.0.0.0 Safari/537.36"
+
       conn
-      |> put_req_header("user-agent", @user_agent)
+      |> put_req_header("user-agent", current_chrome)
       |> put_req_header("x-forwarded-for", "3.0.0.1")
       |> post("/api/event", %{name: "pageview", url: "http://example.com/", domain: site.domain})
 
@@ -268,7 +273,9 @@ defmodule PlausibleWeb.Api.ExternalControllerTest do
         a: 1
       })
 
-      assert %{traffic: 2, traffic_reasons: ["webdriver"]} = get_created_session(site)
+      # @user_agent is an old desktop Chrome, so it also carries outdated_browser
+      assert %{traffic: 2, traffic_reasons: reasons} = get_created_session(site)
+      assert "webdriver" in reasons
     end
 
     test "tracker interaction flag is stored on the session", %{conn: conn, site: site} do

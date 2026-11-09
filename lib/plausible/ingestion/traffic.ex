@@ -7,7 +7,8 @@ defmodule Plausible.Ingestion.Traffic do
 
     * `0` - human
     * `1` - suspicious: at least two weak signals, e.g. an unidentifiable
-      browser coming from a cloud provider network
+      browser coming from a cloud provider network, or a months-old desktop
+      Chrome landing without a referrer
     * `2` - bot: one strong signal, e.g. a known crawler user agent, a
       headless browser or a tracker reported `navigator.webdriver`
 
@@ -32,6 +33,18 @@ defmodule Plausible.Ingestion.Traffic do
     {4, "zero_window", :suspicious},
     {8, "no_languages", :suspicious}
   ]
+
+  # Desktop Chrome auto-updates every four weeks, so real visitors stay within a
+  # few releases of the current one. Scraper fleets pin an old Chromium (e.g.
+  # Chrome 148-150 from China, Singapore and Hong Kong in November 2026, all
+  # direct single-page visits with zero duration). The current major is
+  # estimated from Chrome's release cadence instead of a hardcoded number.
+  @chrome_anchor_major 131
+  @chrome_anchor_date ~D[2024-11-12]
+  @chrome_release_days 28
+  @chrome_outdated_after 6
+
+  @campaign_params ["utm_source", "ref", "source"]
 
   @automation_ua ~r/lightpanda|headlesschrome|phantomjs|playwright|puppeteer|selenium|\bcurl\/|\bwget\/|go-http-client|node-fetch|axios\/|python-requests|python-urllib|aiohttp|httpx|scrapy|libwww-perl|java\/\d/i
 
@@ -91,8 +104,56 @@ defmodule Plausible.Ingestion.Traffic do
         []
 
       true ->
-        unknown_ua(user_agent) ++ no_device(user_agent)
+        unknown_ua(user_agent) ++
+          no_device(user_agent) ++
+          outdated_browser(user_agent, request)
     end
+  end
+
+  @doc "Estimated current stable major version of Chrome on `date`."
+  def current_chrome_major(%Date{} = date) do
+    @chrome_anchor_major + div(Date.diff(date, @chrome_anchor_date), @chrome_release_days)
+  end
+
+  @doc "Highest desktop Chrome major version considered outdated on `date`."
+  def outdated_chrome_major(%Date{} = date) do
+    current_chrome_major(date) - @chrome_outdated_after
+  end
+
+  defp outdated_browser(
+         %UAInspector.Result{
+           client: %UAInspector.Result.Client{name: "Chrome", version: version},
+           device: %UAInspector.Result.Device{type: "desktop"}
+         },
+         request
+       )
+       when is_binary(version) do
+    date =
+      if request.timestamp,
+        do: NaiveDateTime.to_date(request.timestamp),
+        else: Date.utc_today()
+
+    case Integer.parse(version) do
+      {major, _} when major > 0 ->
+        if major <= outdated_chrome_major(date),
+          do: [{"outdated_browser", :suspicious} | no_referrer(request)],
+          else: []
+
+      _ ->
+        []
+    end
+  end
+
+  defp outdated_browser(_, _), do: []
+
+  # A landing without referrer or campaign parameters ("Direct / None"). Only
+  # checked for outdated browsers: on its own it describes most real visitors
+  # who type the address, including those behind VPNs on cloud networks.
+  defp no_referrer(%Request{referrer: referrer, query_params: params}) do
+    has_referrer = is_binary(referrer) and String.trim(referrer) != ""
+    has_campaign = is_map(params) and Enum.any?(@campaign_params, &(params[&1] not in [nil, ""]))
+
+    if has_referrer or has_campaign, do: [], else: [{"no_referrer", :suspicious}]
   end
 
   defp unknown_ua(%UAInspector.Result{client: :unknown, os: :unknown}),
