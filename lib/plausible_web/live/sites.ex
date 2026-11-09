@@ -300,7 +300,7 @@ defmodule PlausibleWeb.Live.Sites do
 
   def site_stats(assigns) do
     ~H"""
-    <div class="md:h-[68px] sm:h-[58px] h-20 pl-8 pr-8 pt-2">
+    <div class="md:h-[84px] sm:h-[74px] h-24 pl-8 pr-8 pt-2">
       <div :if={@hourly_stats == :loading} class="text-center animate-pulse">
         <div class="md:h-[34px] sm:h-[30px] h-11 dark:bg-gray-700 bg-gray-100 rounded-md"></div>
         <div class="md:h-[26px] sm:h-[18px] h-6 mt-1 dark:bg-gray-700 bg-gray-100 rounded-md"></div>
@@ -322,6 +322,10 @@ defmodule PlausibleWeb.Live.Sites do
 
             <.percentage_change change={@hourly_stats.change} />
           </div>
+          <.nonhuman_note
+            suspicious={Map.get(@hourly_stats, :suspicious, 0)}
+            bots={Map.get(@hourly_stats, :bots, 0)}
+          />
         </span>
       </div>
     </div>
@@ -631,6 +635,30 @@ defmodule PlausibleWeb.Live.Sites do
       |> set_filter_text("")
 
     {:noreply, socket}
+  end
+
+  attr :suspicious, :integer, required: true
+  attr :bots, :integer, required: true
+
+  # Same wording and colors as the visitors subline on the dashboard
+  # (assets/js/dashboard/stats/graph/top-stats.js). The visitors count above
+  # already leaves this traffic out.
+  defp nonhuman_note(assigns) do
+    ~H"""
+    <p
+      :if={@suspicious > 0 or @bots > 0}
+      class="text-xs whitespace-nowrap"
+      data-test-id="nonhuman-note"
+    >
+      <span :if={@suspicious > 0} class="text-amber-600 dark:text-amber-400">
+        +<%= PlausibleWeb.StatsView.large_number_format(@suspicious) %> suspicious
+      </span>
+      <span :if={@suspicious > 0 and @bots > 0} class="text-gray-400">·</span>
+      <span :if={@bots > 0} class="text-red-500 dark:text-red-400">
+        +<%= PlausibleWeb.StatsView.large_number_format(@bots) %> bot<%= if @bots != 1, do: "s" %>
+      </span>
+    </p>
+    """
   end
 
   defp load_sites(%{assigns: assigns} = socket) do

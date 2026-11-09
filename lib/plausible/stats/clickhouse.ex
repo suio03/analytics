@@ -132,7 +132,9 @@ defmodule Plausible.Stats.Clickhouse do
        %{
          intervals: empty_24h_intervals(now),
          visitors: 0,
-         change: 0
+         change: 0,
+         suspicious: 0,
+         bots: 0
        }}
     end)
     |> Map.new()
@@ -148,7 +150,7 @@ defmodule Plausible.Stats.Clickhouse do
 
     placeholder = empty_24h_visitors_hourly_intervals(sites, now)
 
-    base_query = base_24h_events_query(sites)
+    base_query = from(e in base_24h_events_query(sites), where: e.traffic == 0)
 
     previous_query = visitors_24h_total(base_query, now, -48, -24)
 
@@ -197,11 +199,46 @@ defmodule Plausible.Stats.Clickhouse do
         change = Plausible.Stats.Compare.percent_change(previous_result[site_id], visitors) || 100
 
         {site_id_to_domain_mapping[site_id],
-         %{intervals: full_entries, visitors: visitors, change: change}}
+         %{
+           intervals: full_entries,
+           visitors: visitors,
+           change: change,
+           suspicious: 0,
+           bots: 0
+         }}
       end)
       |> Map.new()
 
-    Map.merge(placeholder, result)
+    placeholder
+    |> Map.merge(result)
+    |> merge_nonhuman_24h(nonhuman_24h(sites, now), site_id_to_domain_mapping)
+  end
+
+  # Suspicious and bot visitors of the same 24 hours, shown next to the human
+  # count on the sites list (see Plausible.Ingestion.Traffic).
+  defp nonhuman_24h(sites, now) do
+    query =
+      from(e in base_24h_events_query(sites),
+        where: e.traffic > 0,
+        where: e.timestamp >= ^NaiveDateTime.add(now, -24, :hour),
+        where: e.timestamp <= ^now,
+        group_by: e.site_id,
+        select: %{
+          site_id: e.site_id,
+          suspicious: fragment("uniqIf(?, ? = 1)", e.user_id, e.traffic),
+          bots: fragment("uniqIf(?, ? = 2)", e.user_id, e.traffic)
+        }
+      )
+
+    ClickhouseRepo.all(query)
+  end
+
+  defp merge_nonhuman_24h(stats, rows, site_id_to_domain_mapping) do
+    Enum.reduce(rows, stats, fn row, acc ->
+      Map.update!(acc, site_id_to_domain_mapping[row.site_id], fn site_stats ->
+        Map.merge(site_stats, %{suspicious: row.suspicious, bots: row.bots})
+      end)
+    end)
   end
 
   defp visitors_24h_total(base_query, now, offset1, offset2) do
@@ -237,7 +274,6 @@ defmodule Plausible.Stats.Clickhouse do
 
     from e in "events_v2",
       where: e.site_id in ^Enum.map(sites, & &1.id),
-      where: e.traffic == 0,
       where: ^cutoff_times_condition
   end
 

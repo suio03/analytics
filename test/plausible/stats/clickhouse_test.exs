@@ -21,6 +21,8 @@ defmodule Plausible.Stats.ClickhouseTest do
                  domain => %{
                    change: 0,
                    visitors: 0,
+                   suspicious: 0,
+                   bots: 0,
                    intervals: [
                      %{interval: ~N[2023-10-25 11:00:00], visitors: 0},
                      %{interval: ~N[2023-10-25 12:00:00], visitors: 0},
@@ -225,6 +227,24 @@ defmodule Plausible.Stats.ClickhouseTest do
       assert find_interval.(result, site1.domain, ~N[2023-10-25 15:00:00]).visitors == 2
       assert find_interval.(result, site2.domain, ~N[2023-10-25 13:00:00]).visitors == 2
       assert find_interval.(result, site2.domain, ~N[2023-10-25 15:00:00]).visitors == 1
+    end
+
+    test "counts suspicious and bot visitors apart from humans" do
+      fixed_now = ~N[2023-10-26 10:00:15]
+      site = insert(:site)
+
+      populate_stats(site, [
+        build(:pageview, timestamp: ~N[2023-10-25 13:59:00]),
+        build(:pageview, timestamp: ~N[2023-10-25 14:00:00], traffic: 1),
+        build(:pageview, user_id: 7, timestamp: ~N[2023-10-25 15:00:00], traffic: 2),
+        build(:pageview, user_id: 7, timestamp: ~N[2023-10-25 15:01:00], traffic: 2),
+        build(:pageview, timestamp: ~N[2023-10-25 16:00:00], traffic: 2),
+        # outside the last 24 hours
+        build(:pageview, timestamp: ~N[2023-10-24 09:00:00], traffic: 2)
+      ])
+
+      assert %{visitors: 1, suspicious: 1, bots: 2} =
+               Clickhouse.last_24h_visitors_hourly_intervals([site], fixed_now)[site.domain]
     end
 
     test "returns calculated change" do

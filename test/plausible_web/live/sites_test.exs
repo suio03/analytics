@@ -102,6 +102,37 @@ defmodule PlausibleWeb.Live.SitesTest do
       assert site_card =~ site.domain
     end
 
+    test "shows suspicious and bot visitors next to the human count", %{conn: conn, user: user} do
+      site = insert(:site, members: [user])
+      quiet_site = insert(:site, members: [user])
+
+      populate_stats(site, [
+        build(:pageview),
+        build(:pageview, traffic: 1),
+        build(:pageview, traffic: 2),
+        build(:pageview, traffic: 2)
+      ])
+
+      populate_stats(quiet_site, [build(:pageview)])
+
+      {:ok, _lv, html} = live(conn, "/sites")
+
+      site_card = text_of_element(html, "li[data-domain=\"#{site.domain}\"]")
+      assert site_card =~ "1 visitor in last 24h"
+      assert site_card =~ "+1 suspicious"
+      assert site_card =~ "+2 bots"
+
+      refute element_exists?(
+               html,
+               "li[data-domain=\"#{quiet_site.domain}\"] [data-test-id=nonhuman-note]"
+             )
+
+      assert element_exists?(
+               html,
+               "li[data-domain=\"#{site.domain}\"] [data-test-id=nonhuman-note]"
+             )
+    end
+
     test "filters by domain", %{conn: conn, user: user} do
       _site1 = insert(:site, domain: "first.example.com", members: [user])
       _site2 = insert(:site, domain: "second.example.com", members: [user])
