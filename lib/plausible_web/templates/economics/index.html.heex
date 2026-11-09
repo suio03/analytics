@@ -1,0 +1,167 @@
+<.frame site={@site} active="economics">
+  <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Economics</h1>
+      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+        What free users cost against what sign-ups pay.
+        <span :if={@report}>
+          Updated <%= generated(@report["generatedAt"], @site) %> · last <%= @report["days"] %> days
+        </span>
+      </p>
+    </div>
+    <div class="flex items-center gap-4 text-sm">
+      <span :if={@source} class="flex gap-2">
+        <a
+          :for={d <- [28, 56, 90, 180]}
+          href={path(@site, "?days=#{d}")}
+          aria-current={if d == @days, do: "page"}
+          class={
+            if d == @days,
+              do: "font-semibold text-indigo-600 dark:text-indigo-400",
+              else: "text-gray-500 hover:text-indigo-600"
+          }
+        >
+          <%= d %>d
+        </a>
+      </span>
+      <a href={path(@site, "/settings")} class="font-medium text-indigo-600 dark:text-indigo-400">
+        Endpoint
+      </a>
+    </div>
+  </div>
+
+  <div
+    :if={!@source}
+    class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-10 sm:p-16 text-center"
+  >
+    <h2 class="text-xl font-semibold">Free cost against revenue</h2>
+    <p class="max-w-lg mx-auto mt-3 mb-6 text-gray-500 dark:text-gray-400">
+      Point this page at your app's cost report endpoint to see, by day, sign-up week and source, what free users cost and what they pay back.
+    </p>
+    <a href={path(@site, "/settings")} class="button">Connect a cost report</a>
+  </div>
+
+  <div :if={@error} role="alert" class="p-4 mb-6 rounded-lg bg-red-50 text-red-700 text-sm">
+    <%= @error %> Check the <a href={path(@site, "/settings")} class="underline">endpoint</a>.
+  </div>
+
+  <div :if={@report}>
+    <% last7 = Plausible.Economics.recent(@report["daily"]) %>
+    <% cohort_days = @report["cohortDays"] %>
+    <div class="mb-8 grid grid-cols-2 lg:grid-cols-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 divide-x divide-gray-100 dark:divide-gray-700">
+      <.stat
+        label="Free cost · last 7 days"
+        value={usd(last7.free)}
+        note={"#{last7.signups} sign-ups"}
+      />
+      <.stat label="Revenue · last 7 days" value={usd(last7.revenue)} />
+      <.stat label="Free cost ÷ revenue" value={pct(last7.share)} note="Last 7 days" />
+      <.stat
+        label="Payback · full cohorts"
+        value={times(Plausible.Economics.mature_payback(@report["weeks"], cohort_days))}
+        note={"Weeks whose sign-ups all had #{cohort_days} days"}
+      />
+    </div>
+
+    <h2 class="text-lg font-semibold mb-1">By source</h2>
+    <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+      First-touch source of each sign-up. Revenue within <%= cohort_days %> days of sign-up.
+    </p>
+    <div class="mb-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-x-auto">
+      <table class="w-full text-sm text-left tabular-nums">
+        <thead class="bg-gray-50 dark:bg-gray-850 text-xs text-gray-500 dark:text-gray-400">
+          <tr>
+            <th class="px-5 py-3">Source</th>
+            <th class="px-4 py-3 text-right">Sign-ups</th>
+            <th class="px-4 py-3 text-right">Free cost</th>
+            <th class="px-4 py-3 text-right">Per sign-up</th>
+            <th class="px-4 py-3 text-right">Revenue</th>
+            <th class="px-4 py-3 text-right">Buyers</th>
+            <th class="px-4 py-3 text-right">Payback</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+          <tr :for={r <- @report["sources"]}>
+            <td class="px-5 py-3 font-medium break-all"><%= r["key"] %></td>
+            <td class="px-4 py-3 text-right"><%= r["signups"] %></td>
+            <td class="px-4 py-3 text-right"><%= usd(r["freeUsd"]) %></td>
+            <td class="px-4 py-3 text-right"><%= per(r["freePerSignup"]) %></td>
+            <td class="px-4 py-3 text-right"><%= usd(r["revenue"]) %></td>
+            <td class="px-4 py-3 text-right"><%= r["buyers"] %></td>
+            <td class={["px-4 py-3 text-right", payback_class(r["payback"], r["signups"] >= 10)]}>
+              <%= times(r["payback"]) %>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 class="text-lg font-semibold mb-1">By sign-up week</h2>
+    <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+      Weeks start Monday. A week is still filling until every sign-up has had <%= cohort_days %> days.
+    </p>
+    <div class="mb-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-x-auto">
+      <table class="w-full text-sm text-left tabular-nums">
+        <thead class="bg-gray-50 dark:bg-gray-850 text-xs text-gray-500 dark:text-gray-400">
+          <tr>
+            <th class="px-5 py-3">Week</th>
+            <th class="px-4 py-3 text-right">Sign-ups</th>
+            <th class="px-4 py-3 text-right">Free cost</th>
+            <th class="px-4 py-3 text-right">Revenue</th>
+            <th class="px-4 py-3 text-right">Buyers</th>
+            <th class="px-4 py-3 text-right">Payback</th>
+            <th class="px-4 py-3 text-right">Days</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+          <tr :for={r <- @report["weeks"]}>
+            <td class="px-5 py-3 font-medium whitespace-nowrap"><%= r["key"] %></td>
+            <td class="px-4 py-3 text-right"><%= r["signups"] %></td>
+            <td class="px-4 py-3 text-right"><%= usd(r["freeUsd"]) %></td>
+            <td class="px-4 py-3 text-right"><%= usd(r["revenue"]) %></td>
+            <td class="px-4 py-3 text-right"><%= r["buyers"] %></td>
+            <td class={[
+              "px-4 py-3 text-right",
+              payback_class(r["payback"], r["age"] >= cohort_days)
+            ]}>
+              <%= times(r["payback"]) %>
+            </td>
+            <td class="px-4 py-3 text-right text-gray-500"><%= r["age"] %>/<%= cohort_days %></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 class="text-lg font-semibold mb-3">By day</h2>
+    <div class="mb-8 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-x-auto">
+      <table class="w-full text-sm text-left tabular-nums">
+        <thead class="bg-gray-50 dark:bg-gray-850 text-xs text-gray-500 dark:text-gray-400">
+          <tr>
+            <th class="px-5 py-3">Day (UTC)</th>
+            <th class="px-4 py-3 text-right">Sign-ups</th>
+            <th class="px-4 py-3 text-right">Free cost</th>
+            <th class="px-4 py-3 text-right">Paying users' cost</th>
+            <th class="px-4 py-3 text-right">Orders</th>
+            <th class="px-4 py-3 text-right">First orders</th>
+            <th class="px-4 py-3 text-right">Revenue</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+          <tr :for={r <- @report["daily"]}>
+            <td class="px-5 py-3 font-medium whitespace-nowrap"><%= r["day"] %></td>
+            <td class="px-4 py-3 text-right"><%= r["signups"] %></td>
+            <td class="px-4 py-3 text-right"><%= usd(r["freeUsd"]) %></td>
+            <td class="px-4 py-3 text-right"><%= usd(r["paidUsd"]) %></td>
+            <td class="px-4 py-3 text-right"><%= r["orders"] %></td>
+            <td class="px-4 py-3 text-right"><%= r["firstOrders"] %></td>
+            <td class="px-4 py-3 text-right"><%= usd(r["revenue"]) %></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <ul class="text-xs text-gray-500 dark:text-gray-400 space-y-1 list-disc pl-5">
+      <li :for={n <- @report["notes"] || []}><%= n %></li>
+    </ul>
+  </div>
+</.frame>

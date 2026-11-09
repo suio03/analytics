@@ -490,6 +490,9 @@ defmodule PlausibleWeb.Router do
     post "/:domain/transactions/settings", PaymentsController, :save
     post "/:domain/transactions/sync", PaymentsController, :sync
     get "/:domain/transactions/:id", PaymentsController, :show
+    get "/:domain/economics", EconomicsController, :index
+    get "/:domain/economics/settings", EconomicsController, :settings
+    post "/:domain/economics/settings", EconomicsController, :save
 
     get "/:domain/settings", SiteController, :settings
     get "/:domain/settings/general", SiteController, :settings_general

@@ -62,17 +62,31 @@ defmodule PlausibleWeb.PaymentsView do
           Overview
         </a>
         <a
-          href={path(@site)}
-          aria-current={if @active == "transactions", do: "page"}
-          class="pb-3 border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400"
+          :for={
+            {label, href, tab} <- [
+              {"Transactions", path(@site), "transactions"},
+              {"Economics", "/#{URI.encode_www_form(@site.domain)}/economics", "economics"}
+            ]
+          }
+          href={href}
+          aria-current={if tab_active?(@active, tab), do: "page"}
+          class={
+            if tab_active?(@active, tab),
+              do: "pb-3 border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400",
+              else: "pb-3 text-gray-500 dark:text-gray-400 hover:text-indigo-600"
+          }
         >
-          Transactions
+          <%= label %>
         </a>
       </nav>
       <%= render_slot(@inner_block) %>
     </div>
     """
   end
+
+  # Payment settings ("settings") belong to the Transactions tab.
+  defp tab_active?(active, "transactions"), do: active in ["transactions", "settings"]
+  defp tab_active?(active, tab), do: active == tab
 
   attr(:status, :string, required: true)
 

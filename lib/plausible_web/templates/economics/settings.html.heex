@@ -1,0 +1,42 @@
+<.frame site={@site} active="economics">
+  <a href={path(@site)} class="text-sm text-indigo-600 dark:text-indigo-400">← Economics</a>
+  <h1 class="text-2xl font-bold tracking-tight mt-6">Cost report endpoint</h1>
+  <p class="mt-2 mb-8 text-sm text-gray-500 dark:text-gray-400 max-w-2xl">
+    The app computes the report; this page fetches it when you open Economics. The token is encrypted and only sent from the server.
+  </p>
+  <div :if={@error} role="alert" class="p-4 mb-6 rounded-lg bg-red-50 text-red-700 text-sm">
+    <%= @error %>
+  </div>
+  <form
+    action={path(@site, "/settings")}
+    method="post"
+    class="max-w-2xl space-y-5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6"
+  >
+    <input type="hidden" name="_csrf_token" value={csrf()} />
+    <label class="block text-sm font-medium">
+      Endpoint URL
+      <input
+        type="url"
+        name="source[url]"
+        required
+        value={@source && @source.url}
+        placeholder={"https://#{@site.domain}/api/ops/economics"}
+        class="mt-2 w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-850 text-sm"
+      />
+    </label>
+    <label class="block text-sm font-medium">
+      Bearer token
+      <input
+        type="password"
+        name="source[token]"
+        autocomplete="new-password"
+        required={!@source}
+        class="mt-2 w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-850 text-sm"
+      />
+      <span :if={@source} class="block text-xs font-normal text-gray-500 mt-1">
+        A token is saved. Leave blank to keep it.
+      </span>
+    </label>
+    <button class="button" type="submit">Save endpoint</button>
+  </form>
+</.frame>
