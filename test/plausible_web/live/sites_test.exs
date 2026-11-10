@@ -172,73 +172,98 @@ defmodule PlausibleWeb.Live.SitesTest do
     end
   end
 
-  describe "pinning" do
-    test "renders pin site option when site not pinned", %{conn: conn, user: user} do
+  describe "collapsing" do
+    test "collapsed site leaves the grid for the collapsed row and comes back", %{
+      conn: conn,
+      user: user
+    } do
       site = insert(:site, members: [user])
+
+      {:ok, lv, _html} = live(conn, "/sites")
+
+      html =
+        lv
+        |> element(~s/li[data-domain="#{site.domain}"] a[data-collapse-site]/)
+        |> render_click()
+
+      refute element_exists?(html, ~s/#site-grid li[data-domain="#{site.domain}"]/)
+      assert element_exists?(html, ~s/#collapsed-sites li[data-domain="#{site.domain}"]/)
+      assert text_of_element(html, "#collapsed-sites h3") == "Collapsed · 1"
+
+      html =
+        lv
+        |> element(~s/#collapsed-sites button[phx-value-domain="#{site.domain}"]/)
+        |> render_click()
+
+      assert element_exists?(html, ~s/#site-grid li[data-domain="#{site.domain}"]/)
+      refute element_exists?(html, "#collapsed-sites")
+    end
+
+    test "collapsed state persists", %{conn: conn, user: user} do
+      site = insert(:site, members: [user])
+      Plausible.Sites.set_collapsed(user, site, true)
 
       {:ok, _lv, html} = live(conn, "/sites")
 
-      assert text_of_element(
-               html,
-               ~s/li[data-domain="#{site.domain}"] a[phx-value-domain]/
-             ) == "Pin Site"
+      assert element_exists?(html, ~s/#collapsed-sites li[data-domain="#{site.domain}"]/)
     end
 
-    test "site state changes when pin toggled", %{conn: conn, user: user} do
-      site = insert(:site, members: [user])
-
-      {:ok, lv, _html} = live(conn, "/sites")
-
-      button_selector = ~s/li[data-domain="#{site.domain}"] a[phx-value-domain]/
-
-      html =
-        lv
-        |> element(button_selector)
-        |> render_click()
-
-      assert html =~ "Site pinned"
-
-      assert text_of_element(html, button_selector) == "Unpin Site"
-
-      html =
-        lv
-        |> element(button_selector)
-        |> render_click()
-
-      assert html =~ "Site unpinned"
-
-      assert text_of_element(html, button_selector) == "Pin Site"
-    end
-
-    test "shows error when pins limit hit", %{conn: conn, user: user} do
-      for _ <- 1..9 do
-        site = insert(:site, members: [user])
-        assert {:ok, _} = Plausible.Sites.toggle_pin(user, site)
-      end
-
-      site = insert(:site, members: [user])
-
-      {:ok, lv, _html} = live(conn, "/sites")
-
-      button_selector = ~s/li[data-domain="#{site.domain}"] a[phx-value-domain]/
-
-      html =
-        lv
-        |> element(button_selector)
-        |> render_click()
-
-      assert text(html) =~ "Looks like you've hit the pinned sites limit!"
-    end
-
-    test "does not allow pinning site user doesn't have access to", %{conn: conn, user: user} do
+    test "does not collapse a site the user doesn't have access to", %{conn: conn, user: user} do
       site = insert(:site)
 
       {:ok, lv, _html} = live(conn, "/sites")
 
-      render_click(lv, "pin-toggle", %{"domain" => site.domain})
+      render_click(lv, "collapse", %{"domain" => site.domain})
 
       refute Repo.get_by(Plausible.Site.UserPreference, user_id: user.id, site_id: site.id)
     end
+  end
+
+  describe "reordering" do
+    test "keeps the dragged order", %{conn: conn, user: user} do
+      a = insert(:site, domain: "a.example.com", members: [user])
+      b = insert(:site, domain: "b.example.com", members: [user])
+      c = insert(:site, domain: "c.example.com", members: [user])
+
+      {:ok, lv, html} = live(conn, "/sites")
+      assert grid_domains(html) == [a.domain, b.domain, c.domain]
+
+      render_hook(lv, "reorder", %{"domains" => [c.domain, a.domain, b.domain]})
+
+      {:ok, _lv, html} = live(conn, "/sites")
+      assert grid_domains(html) == [c.domain, a.domain, b.domain]
+    end
+
+    test "ignores sites the user doesn't have access to", %{conn: conn, user: user} do
+      mine = insert(:site, members: [user])
+      other = insert(:site)
+
+      {:ok, lv, _html} = live(conn, "/sites")
+      render_hook(lv, "reorder", %{"domains" => [other.domain, mine.domain]})
+
+      refute Repo.get_by(Plausible.Site.UserPreference, user_id: user.id, site_id: other.id)
+
+      assert Repo.get_by(Plausible.Site.UserPreference, user_id: user.id, site_id: mine.id).position ==
+               0
+    end
+
+    test "is disabled while searching", %{conn: conn, user: user} do
+      a = insert(:site, domain: "a.example.com", members: [user])
+      b = insert(:site, domain: "b.example.com", members: [user])
+
+      {:ok, lv, _html} = live(conn, "/sites")
+      type_into_input(lv, "filter_text", "example")
+      html = render_hook(lv, "reorder", %{"domains" => [b.domain, a.domain]})
+
+      refute element_exists?(html, "[data-site-handle]")
+      refute Repo.get_by(Plausible.Site.UserPreference, user_id: user.id, site_id: a.id)
+    end
+  end
+
+  defp grid_domains(html) do
+    html
+    |> find("#site-grid li[data-sortable]")
+    |> Enum.map(&text_of_attr(&1, "data-domain"))
   end
 
   defp type_into_input(lv, id, text) do

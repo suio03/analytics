@@ -8,10 +8,12 @@ defmodule Plausible.Site.UserPreference do
 
   @type t() :: %__MODULE__{}
 
-  @options [:pinned_at]
+  @options [:pinned_at, :position, :collapsed]
 
   schema "site_user_preferences" do
     field :pinned_at, :naive_datetime
+    field :position, :integer
+    field :collapsed, :boolean, default: false
 
     belongs_to :user, Plausible.Auth.User
     belongs_to :site, Plausible.Site

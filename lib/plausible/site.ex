@@ -58,6 +58,8 @@ defmodule Plausible.Site do
     # "pinned_site" or "site", where invitations are first.
     field :entry_type, :string, virtual: true
     field :pinned_at, :naive_datetime, virtual: true
+    field :position, :integer, virtual: true
+    field :collapsed, :boolean, virtual: true, default: false
 
     # Used for caching imports data for the duration of the whole request
     # to avoid multiple identical fetches. Populated by plugs putting

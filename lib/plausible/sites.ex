@@ -71,6 +71,54 @@ defmodule Plausible.Sites do
     )
   end
 
+  @doc """
+  Stores `domains` as the user's order on the sites list: each gets its index
+  as position. Domains the user has no membership of are ignored.
+  """
+  @spec reorder(Auth.User.t(), [String.t()]) :: :ok
+  def reorder(user, domains) when is_list(domains) do
+    domains = domains |> Enum.filter(&is_binary/1) |> Enum.uniq()
+
+    sites =
+      from(s in Site,
+        inner_join: sm in assoc(s, :memberships),
+        on: sm.user_id == ^user.id,
+        where: s.domain in ^domains
+      )
+      |> Repo.all()
+      |> Map.new(&{&1.domain, &1})
+
+    now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+
+    rows =
+      domains
+      |> Enum.filter(&Map.has_key?(sites, &1))
+      |> Enum.with_index()
+      |> Enum.map(fn {domain, index} ->
+        %{
+          user_id: user.id,
+          site_id: sites[domain].id,
+          position: index,
+          inserted_at: now,
+          updated_at: now
+        }
+      end)
+
+    if rows != [] do
+      Repo.insert_all(Site.UserPreference, rows,
+        conflict_target: [:user_id, :site_id],
+        on_conflict: {:replace, [:position, :updated_at]}
+      )
+    end
+
+    :ok
+  end
+
+  @spec set_collapsed(Auth.User.t(), Site.t(), boolean()) :: Site.UserPreference.t()
+  def set_collapsed(user, site, collapsed?) when is_boolean(collapsed?) do
+    set_option(user, site, :collapsed, collapsed?)
+  end
+
   @spec list(Auth.User.t(), map(), [list_opt()]) :: Scrivener.Page.t()
   def list(user, pagination_params, opts \\ []) do
     domain_filter = Keyword.get(opts, :filter_by_domain)
@@ -120,6 +168,8 @@ defmodule Plausible.Sites do
         select: %{
           s
           | pinned_at: selected_as(up.pinned_at, :pinned_at),
+            position: up.position,
+            collapsed: coalesce(up.collapsed, false),
             entry_type:
               selected_as(
                 fragment(
@@ -136,7 +186,14 @@ defmodule Plausible.Sites do
                 :entry_type
               )
         },
-        order_by: [asc: selected_as(:entry_type), desc: selected_as(:pinned_at), asc: s.domain],
+        # Invitations first, then the user's own order (see `reorder/2`); sites
+        # never placed follow, pinned ones first, then by domain.
+        order_by: [
+          asc: fragment("? IS NULL", i.id),
+          asc_nulls_last: up.position,
+          desc_nulls_last: up.pinned_at,
+          asc: s.domain
+        ],
         preload: [memberships: sm, invitations: i]
       )
       |> maybe_filter_by_domain(domain_filter)

@@ -90,12 +90,18 @@ defmodule PlausibleWeb.Live.Sites do
       </p>
 
       <div :if={@has_sites?}>
-        <ul class="my-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <%= for site <- @sites.entries do %>
+        <ul
+          id="site-grid"
+          phx-hook="SiteOrder"
+          data-reorderable={to_string(@reorderable?)}
+          class="my-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3"
+        >
+          <%= for site <- @sites.entries, not site.collapsed or site.entry_type == "invitation" do %>
             <.site
               :if={site.entry_type in ["pinned_site", "site"]}
               site={site}
               hourly_stats={@hourly_stats[site.domain]}
+              reorderable?={@reorderable?}
             />
             <.invitation
               :if={site.entry_type == "invitation"}
@@ -105,6 +111,11 @@ defmodule PlausibleWeb.Live.Sites do
             />
           <% end %>
         </ul>
+
+        <.collapsed_sites
+          sites={Enum.filter(@sites.entries, &(&1.collapsed and &1.entry_type != "invitation"))}
+          hourly_stats={@hourly_stats}
+        />
 
         <.pagination
           :if={@sites.total_pages > 1}
@@ -192,6 +203,7 @@ defmodule PlausibleWeb.Live.Sites do
 
   attr :site, Plausible.Site, required: true
   attr :hourly_stats, :map, required: true
+  attr :reorderable?, :boolean, default: false
 
   def site(assigns) do
     ~H"""
@@ -199,18 +211,7 @@ defmodule PlausibleWeb.Live.Sites do
       class="group relative hidden"
       id={"site-card-#{hash_domain(@site.domain)}"}
       data-domain={@site.domain}
-      data-pin-toggled={
-        JS.show(
-          transition: {"duration-500", "opacity-0 shadow-2xl -translate-y-6", "opacity-100 shadow"},
-          time: 400
-        )
-      }
-      data-pin-failed={
-        JS.show(
-          transition: {"duration-500", "opacity-0", "opacity-100"},
-          time: 200
-        )
-      }
+      data-sortable
       phx-mounted={JS.show()}
     >
       <.unstyled_link href={"/#{URI.encode_www_form(@site.domain)}"}>
@@ -229,6 +230,17 @@ defmodule PlausibleWeb.Live.Sites do
           <.site_stats hourly_stats={@hourly_stats} />
         </div>
       </.unstyled_link>
+
+      <button
+        :if={@reorderable?}
+        type="button"
+        data-site-handle
+        title="Drag to reorder (or focus and use the arrow keys)"
+        aria-label={"Move #{@site.domain}"}
+        class="absolute top-0 right-8 h-10 w-8 flex items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-gray-400 dark:text-gray-600 hover:text-black dark:hover:text-indigo-400 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+      >
+        <Heroicons.bars_2 class="w-4 h-4" />
+      </button>
 
       <.ellipsis_menu site={@site} />
     </li>
@@ -256,22 +268,17 @@ defmodule PlausibleWeb.Live.Sites do
             x-on:click.prevent
             phx-click={
               JS.hide(
-                transition: {"duration-500", "opacity-100", "opacity-0"},
+                transition: {"duration-300", "opacity-100", "opacity-0"},
                 to: "#site-card-#{hash_domain(@site.domain)}",
-                time: 500
+                time: 300
               )
-              |> JS.push("pin-toggle")
+              |> JS.push("collapse")
             }
             phx-value-domain={@site.domain}
+            data-collapse-site
           >
-            <.icon_pin
-              :if={@site.pinned_at}
-              class="pt-1 mr-3 h-5 w-5 text-red-400 stroke-red-500 dark:text-yellow-600 dark:stroke-yellow-700"
-            />
-            <span :if={@site.pinned_at}>Unpin Site</span>
-
-            <.icon_pin :if={!@site.pinned_at} class="pt-1 mr-3 h-5 w-5" />
-            <span :if={!@site.pinned_at}>Pin Site</span>
+            <Heroicons.eye_slash class="mr-3 h-5 w-5" />
+            <span>Collapse</span>
           </.dropdown_link>
         </div>
       </:panel>
@@ -279,20 +286,51 @@ defmodule PlausibleWeb.Live.Sites do
     """
   end
 
-  attr :rest, :global
+  attr :sites, :list, required: true
+  attr :hourly_stats, :map, required: true
 
-  def icon_pin(assigns) do
+  # Collapsed sites keep a one-line chip below the grid: open the dashboard
+  # from it, or show the site in the grid again.
+  def collapsed_sites(assigns) do
     ~H"""
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="16"
-      height="16"
-      fill="currentColor"
-      viewBox="0 0 16 16"
-      {@rest}
-    >
-      <path d="M9.828.722a.5.5 0 0 1 .354.146l4.95 4.95a.5.5 0 0 1 0 .707c-.48.48-1.072.588-1.503.588-.177 0-.335-.018-.46-.039l-3.134 3.134a5.927 5.927 0 0 1 .16 1.013c.046.702-.032 1.687-.72 2.375a.5.5 0 0 1-.707 0l-2.829-2.828-3.182 3.182c-.195.195-1.219.902-1.414.707-.195-.195.512-1.22.707-1.414l3.182-3.182-2.828-2.829a.5.5 0 0 1 0-.707c.688-.688 1.673-.767 2.375-.72a5.922 5.922 0 0 1 1.013.16l3.134-3.133a2.772 2.772 0 0 1-.04-.461c0-.43.108-1.022.589-1.503a.5.5 0 0 1 .353-.146z" />
-    </svg>
+    <div :if={@sites != []} id="collapsed-sites" class="mb-6">
+      <h3 class="mb-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+        Collapsed · <%= length(@sites) %>
+      </h3>
+      <ul class="flex flex-wrap gap-2">
+        <li
+          :for={site <- @sites}
+          id={"collapsed-site-#{hash_domain(site.domain)}"}
+          data-domain={site.domain}
+          class="inline-flex max-w-full items-center rounded-full bg-white dark:bg-gray-800 shadow text-sm"
+        >
+          <.unstyled_link
+            href={"/#{URI.encode_www_form(site.domain)}"}
+            class="flex min-w-0 items-center gap-2 py-1.5 pl-3 pr-1 text-gray-800 dark:text-gray-200 hover:text-indigo-600 dark:hover:text-indigo-400"
+          >
+            <.favicon domain={site.domain} />
+            <span class="truncate"><%= site.domain %></span>
+            <span
+              :if={is_map(@hourly_stats[site.domain])}
+              class="text-xs tabular-nums text-gray-500 dark:text-gray-400"
+              title="Visitors in last 24h"
+            >
+              <%= PlausibleWeb.StatsView.large_number_format(@hourly_stats[site.domain].visitors) %>
+            </span>
+          </.unstyled_link>
+          <button
+            type="button"
+            phx-click="expand"
+            phx-value-domain={site.domain}
+            title="Show in the grid"
+            aria-label={"Show #{site.domain} in the grid"}
+            class="flex-shrink-0 rounded-full py-1.5 pl-1 pr-3 text-gray-400 hover:text-black dark:text-gray-500 dark:hover:text-indigo-400"
+          >
+            <Heroicons.eye class="h-4 w-4" />
+          </button>
+        </li>
+      </ul>
+    </div>
     """
   end
 
@@ -566,47 +604,22 @@ defmodule PlausibleWeb.Live.Sites do
     """
   end
 
-  def handle_event("pin-toggle", %{"domain" => domain}, socket) do
-    site = Enum.find(socket.assigns.sites.entries, &(&1.domain == domain))
+  def handle_event(event, %{"domain" => domain}, socket) when event in ["collapse", "expand"] do
+    case Enum.find(socket.assigns.sites.entries, &(&1.domain == domain)) do
+      %Site{entry_type: type} = site when type != "invitation" ->
+        Sites.set_collapsed(socket.assigns.current_user, site, event == "collapse")
+        {:noreply, load_sites(socket)}
 
-    if site do
-      socket =
-        case Sites.toggle_pin(socket.assigns.current_user, site) do
-          {:ok, preference} ->
-            flash_message =
-              if preference.pinned_at do
-                "Site pinned"
-              else
-                "Site unpinned"
-              end
+      _ ->
+        {:noreply, socket}
+    end
+  end
 
-            socket
-            |> put_live_flash(:success, flash_message)
-            |> load_sites()
-            |> push_event("js-exec", %{
-              to: "#site-card-#{hash_domain(site.domain)}",
-              attr: "data-pin-toggled"
-            })
-
-          {:error, :too_many_pins} ->
-            flash_message =
-              "Looks like you've hit the pinned sites limit! " <>
-                "Please unpin one of your pinned sites to make room for new pins"
-
-            socket
-            |> put_live_flash(:error, flash_message)
-            |> push_event("js-exec", %{
-              to: "#site-card-#{hash_domain(site.domain)}",
-              attr: "data-pin-failed"
-            })
-        end
-
-      {:noreply, socket}
+  def handle_event("reorder", %{"domains" => domains}, socket) when is_list(domains) do
+    if socket.assigns.reorderable? do
+      Sites.reorder(socket.assigns.current_user, domains)
+      {:noreply, load_sites(socket)}
     else
-      Sentry.capture_message("Attempting to toggle pin for invalid domain.",
-        extra: %{domain: domain, user: socket.assigns.current_user.id}
-      )
-
       {:noreply, socket}
     end
   end
@@ -685,7 +698,10 @@ defmodule PlausibleWeb.Live.Sites do
       socket,
       sites: sites,
       invitations: invitations,
-      hourly_stats: hourly_stats
+      hourly_stats: hourly_stats,
+      # The stored order covers all sites, so dragging only makes sense when
+      # all of them are on screen.
+      reorderable?: String.trim(assigns.filter_text) == "" and sites.total_pages <= 1
     )
   end
 
