@@ -92,6 +92,111 @@ defmodule PlausibleWeb.EconomicsView do
     """
   end
 
+  @doc "Short name of an IANA zone for labels: Australia/Melbourne → Melbourne, Etc/UTC → UTC."
+  def tz_label(tz) when is_binary(tz) do
+    tz |> String.split("/") |> List.last() |> String.replace("_", " ")
+  end
+
+  def tz_label(_), do: "UTC"
+
+  attr(:title, :string, required: true)
+
+  @doc "A section heading with the handle that drags the section (or moves it with the arrow keys)."
+  def section_title(assigns) do
+    ~H"""
+    <div class="flex items-center gap-2 mb-1">
+      <button
+        type="button"
+        data-economics-handle
+        title="Drag to reorder (or focus and use the arrow keys)"
+        aria-label={"Move #{@title}"}
+        class="-ml-1 p-1 rounded cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 dark:text-gray-600 dark:hover:text-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+      >
+        <Heroicons.bars_2 class="w-4 h-4" />
+      </button>
+      <h2 class="text-lg font-semibold"><%= @title %></h2>
+    </div>
+    """
+  end
+
+  @doc """
+  Restores the viewer's section order (kept in this browser, the same on every site) and lets them
+  drag sections by their handle or move a focused handle with the arrow keys.
+  """
+  def reorder_script(assigns) do
+    ~H"""
+    <script>
+      (function () {
+        var KEY = "economics-section-order";
+        var box = document.querySelector("[data-economics-sections]");
+        if (!box) return;
+        function sections() {
+          return Array.prototype.filter.call(box.children, function (el) {
+            return el.hasAttribute("data-economics-section");
+          });
+        }
+        function idOf(el) { return el.getAttribute("data-economics-section"); }
+        function save() {
+          try { localStorage.setItem(KEY, JSON.stringify(sections().map(idOf))); } catch (e) {}
+        }
+        try {
+          var saved = JSON.parse(localStorage.getItem(KEY) || "[]");
+          if (Array.isArray(saved)) {
+            var all = sections();
+            var rank = function (el) { var i = saved.indexOf(idOf(el)); return i < 0 ? saved.length + all.indexOf(el) : i; };
+            all.slice().sort(function (a, b) { return rank(a) - rank(b); }).forEach(function (el) { box.appendChild(el); });
+          }
+        } catch (e) {}
+
+        var dragging = null;
+        box.addEventListener("pointerdown", function (e) {
+          var handle = e.target.closest("[data-economics-handle]");
+          if (handle) handle.closest("[data-economics-section]").draggable = true;
+        });
+        box.addEventListener("pointerup", function () {
+          sections().forEach(function (el) { el.draggable = false; });
+        });
+        box.addEventListener("dragstart", function (e) {
+          dragging = e.target.closest("[data-economics-section]");
+          if (!dragging) return;
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", idOf(dragging));
+          dragging.classList.add("opacity-50");
+        });
+        box.addEventListener("dragover", function (e) {
+          if (!dragging) return;
+          e.preventDefault();
+          var before = sections().find(function (el) {
+            var r = el.getBoundingClientRect();
+            return el !== dragging && e.clientY < r.top + r.height / 2;
+          });
+          if (before) { if (dragging.nextElementSibling !== before) box.insertBefore(dragging, before); }
+          else if (box.lastElementChild !== dragging) box.appendChild(dragging);
+        });
+        box.addEventListener("drop", function (e) { if (dragging) e.preventDefault(); });
+        box.addEventListener("dragend", function () {
+          if (!dragging) return;
+          dragging.classList.remove("opacity-50");
+          dragging.draggable = false;
+          dragging = null;
+          save();
+        });
+        box.addEventListener("keydown", function (e) {
+          var handle = e.target.closest("[data-economics-handle]");
+          if (!handle || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+          e.preventDefault();
+          var el = handle.closest("[data-economics-section]");
+          if (e.key === "ArrowUp" && el.previousElementSibling) box.insertBefore(el, el.previousElementSibling);
+          if (e.key === "ArrowDown" && el.nextElementSibling) box.insertBefore(el.nextElementSibling, el);
+          handle.focus();
+          el.scrollIntoView({ block: "nearest" });
+          save();
+        });
+      })();
+    </script>
+    """
+  end
+
   @doc "Red below 1×, amber below 3×; a young cohort (still filling) is not colored."
   def payback_class(nil, _), do: "text-gray-400"
   def payback_class(_, false), do: "text-gray-500"

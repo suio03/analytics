@@ -6,13 +6,15 @@ defmodule PlausibleWeb.EconomicsController do
   plug(PlausibleWeb.Plugs.AuthorizeSiteAccess, [:owner, :admin, :super_admin])
   plug(:private_response)
 
+  @default_days 28
+
   def index(conn, params) do
     site = conn.assigns.site
     source = Economics.source(site.id)
     days = days(params["days"])
 
     {report, error} =
-      case source && Economics.fetch(source, days) do
+      case source && Economics.fetch(source, days, site.timezone) do
         nil -> {nil, nil}
         {:ok, report} -> {report, nil}
         {:error, message} -> {nil, message}
@@ -49,11 +51,11 @@ defmodule PlausibleWeb.EconomicsController do
   defp days(param) when is_binary(param) do
     case Integer.parse(param) do
       {n, ""} when n in 7..180 -> n
-      _ -> 56
+      _ -> @default_days
     end
   end
 
-  defp days(_), do: 56
+  defp days(_), do: @default_days
 
   defp render_settings(conn, error \\ nil) do
     render(conn, "settings.html",

@@ -9,12 +9,31 @@ The private `/:domain/economics` page shows what a site's free users cost agains
 
 Access matches Transactions: site owners, admins and super admins. Responses are `private, no-store`.
 
-## Report format
+## Who computes what
 
-`GET <url>?days=N` (7–180) with `Authorization: Bearer <token>` returns JSON:
+The app exports facts: its accounts, what each one cost and what they paid. Only the app knows what a call cost and whether its account had paid by then, so that stays there. This page does all the reporting: local days and weeks in the site's timezone, the window, first-touch source groups, the 30-day cohort window and payback (`lib/plausible/economics/report.ex`). Changing the report never needs a change in the apps; only a new kind of fact does.
 
-- `generatedAt`, `days`, `cohortDays`, `notes` (list of strings shown under the tables)
-- `daily`: `day`, `signups`, `freeUsd`, `paidUsd`, `orders`, `firstOrders`, `revenue`, newest first
-- `weeks` (by sign-up week, Monday) and `sources` (by first-touch source): `key`, `signups`, `buyers`, `freeUsd`, `revenue`, `freePerSignup`, `revenuePerSignup`, `payback`; weeks also have `age`, the days the week's last sign-up has had, up to `cohortDays`
+## Export format (format 2)
+
+`GET <url>?days=N&since=<unix seconds>&format=2` with `Authorization: Bearer <token>`. `since` is the first moment of the window's first local day; return everything from then on (cap it at about 200 days back). `days` is for format 1 apps. JSON:
+
+- `format`: `2`, `generatedAt` (ISO time), `notes`: what the app's cost does and doesn't include (strings, shown under the tables)
+- `users`: accounts created since `since`: `id`, `at` (unix seconds), `guest` (anonymous account, counted in cost but not as a sign-up), first touch `source` (utm_source / ?ref=), `medium`, `campaign`, `referrer` (host), `landing`, `tracked` (`false` for accounts from before the app recorded first touches), `platform` (`web`, `ios`, `android`, or null)
+- `costs`: model cost since `since` in 15-minute buckets: `user` (null when the call has no account), `at` (bucket start), `free` (USD spent while the account had not paid yet), `paid` (USD spent after its first paid order)
+- `orders`: paid orders since `since`: `user`, `at`, `usd` (before payment fees), `first` (the account's first paid order), `sku`
+
+Fields beyond these are ignored, so an app can add facts before the page uses them. Add fields; never change what one means.
+
+Source groups: `source` when set; else the referrer, with sign-in redirects (`accounts.*`, `appleid.apple.com`) as direct, any `google.` host as `google`, `*bing.com` as `bing`, other hosts without `www.`; else `(before tracking)` when `tracked` is false, else `(direct or unknown)`.
+
+The window is the last N local days including today (7, 28, 90 or 180; 28 by default). The summary covers the whole window; by-day rows include days with no activity, and today is marked "so far". Weeks start on the local Monday, and a week is full once 30 days have passed since it ended.
+
+## Format 1 (app-computed, deprecated)
+
+An app that ignores `format` and returns `daily`, `weeks` and `sources` is shown as it computed them, in UTC days. Keys: `generatedAt`, `days`, `cohortDays`, `notes`; `daily`: `day`, `signups`, `freeUsd`, `paidUsd`, `orders`, `firstOrders`, `revenue`, newest first; `weeks` and `sources`: `key`, `signups`, `buyers`, `freeUsd`, `revenue`, `freePerSignup`, `revenuePerSignup`, `payback`, weeks also `age`.
+
+## Page
 
 Payback is colored red below 1× and amber below 3×, only for weeks that have had their full window and sources with at least 10 sign-ups.
+
+Sections (summary, by source, by sign-up week, by day) can be reordered by dragging the handle beside each heading, or by focusing it and pressing the arrow keys. The order is kept in the viewer's browser (`localStorage`, key `economics-section-order`) and is the same on every site.

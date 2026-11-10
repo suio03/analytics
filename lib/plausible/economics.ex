@@ -33,7 +33,7 @@ defmodule Plausible.Economics do
   """
   import Ecto.Query
   alias Plausible.Repo
-  alias Plausible.Economics.Source
+  alias Plausible.Economics.{Report, Source}
 
   def source(site_id), do: Repo.one(from(s in Source, where: s.site_id == ^site_id))
 
@@ -50,23 +50,32 @@ defmodule Plausible.Economics do
     |> Repo.insert_or_update()
   end
 
-  @doc "The report as decoded JSON, or `{:error, reason}`."
-  def fetch(%Source{} = source, days \\ 56) do
+  @doc """
+  The report for the last `days` local days in `tz`, or `{:error, reason}`. Apps that export raw
+  data (format 2) get `since` and their export is computed here; a format 1 app computes the report
+  itself from `days` (UTC days) and it is shown as is.
+  """
+  def fetch(%Source{} = source, days \\ 28, tz \\ "Etc/UTC") do
     opts = Application.get_env(:plausible, __MODULE__, [])
 
     case Req.get(
            [
              url: source.url,
              headers: [{"authorization", "Bearer #{source.token}"}],
-             params: [days: days],
+             params: [days: days, since: Report.since(tz, days), format: 2],
              receive_timeout: 30_000,
              retry: false,
              redirect: false
            ] ++ opts
          ) do
+      {:ok, %{status: 200, body: %{} = body}} when is_map_key(body, "users") ->
+        if Report.raw?(body),
+          do: {:ok, Report.build(body, tz, days)},
+          else: {:error, "The endpoint did not return a cost report."}
+
       {:ok, %{status: 200, body: %{"daily" => d, "weeks" => w, "sources" => s} = body}}
       when is_list(d) and is_list(w) and is_list(s) ->
-        {:ok, body}
+        {:ok, Map.put_new(body, "timezone", "Etc/UTC")}
 
       {:ok, %{status: 200}} ->
         {:error, "The endpoint did not return a cost report."}
@@ -82,9 +91,8 @@ defmodule Plausible.Economics do
     end
   end
 
-  @doc "Totals over the latest `n` daily rows."
-  def recent(daily, n \\ 7) do
-    rows = Enum.take(daily, n)
+  @doc "Totals over the report's daily rows (the whole window)."
+  def totals(rows) do
     free = sum(rows, "freeUsd")
     revenue = sum(rows, "revenue")
 

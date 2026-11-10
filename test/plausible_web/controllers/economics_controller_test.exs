@@ -123,7 +123,7 @@ defmodule PlausibleWeb.EconomicsControllerTest do
 
     Req.Test.stub(__MODULE__, fn conn ->
       assert Plug.Conn.get_req_header(conn, "authorization") == ["Bearer never-render-this-token"]
-      assert conn.query_string == "days=90"
+      assert %{"days" => "90", "format" => "2"} = Plug.Conn.Query.decode(conn.query_string)
       Req.Test.json(conn, @report)
     end)
 
@@ -135,10 +135,44 @@ defmodule PlausibleWeb.EconomicsControllerTest do
     assert html =~ "newref"
     assert html =~ "$18.27"
     assert html =~ "5.0×"
+    assert html =~ "Day (UTC)"
     refute html =~ "never-render-this-token"
 
     settings = get(conn, "/economics.example/economics/settings") |> html_response(200)
     refute settings =~ "never-render-this-token"
+  end
+
+  test "a raw export is computed in the site's timezone", %{conn: conn, site: site} do
+    site =
+      site |> Ecto.Changeset.change(timezone: "Australia/Melbourne") |> Plausible.Repo.update!()
+
+    {:ok, _} = Economics.save_source(site.id, %{"url" => "https://app.example/x", "token" => "t"})
+    now = System.os_time(:second)
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      params = Plug.Conn.Query.decode(conn.query_string)
+      assert params["days"] == "7"
+
+      assert String.to_integer(params["since"]) ==
+               Plausible.Economics.Report.since("Australia/Melbourne", 7)
+
+      Req.Test.json(conn, %{
+        "format" => 2,
+        "generatedAt" => "2026-11-10T10:00:00Z",
+        "notes" => ["Free cost: model calls."],
+        "users" => [%{"id" => "u1", "at" => now - 60, "source" => "taaft"}],
+        "costs" => [%{"user" => "u1", "at" => now - 60, "free" => 0.42, "paid" => 0}],
+        "orders" => []
+      })
+    end)
+
+    html = get(conn, "/economics.example/economics?days=7") |> html_response(200)
+    assert html =~ "Day (Melbourne)"
+    assert html =~ "Melbourne time"
+    assert html =~ "There&#39;s An AI For That"
+    assert html =~ "$0.42"
+    assert html =~ "so far"
+    assert html =~ ~s(data-economics-section="daily")
   end
 
   test "a refused token shows an error", %{conn: conn, site: site} do
@@ -169,7 +203,7 @@ defmodule PlausibleWeb.EconomicsControllerTest do
     assert html_response(conn2, 422) =~ "blank"
 
     Req.Test.stub(__MODULE__, fn conn ->
-      assert conn.query_string == "days=56"
+      assert %{"days" => "28"} = Plug.Conn.Query.decode(conn.query_string)
       Req.Test.json(conn, @report)
     end)
 
