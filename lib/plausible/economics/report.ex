@@ -73,9 +73,69 @@ defmodule Plausible.Economics.Report do
       "notes" => notes(raw["notes"], guests, days),
       "daily" => daily(start, today, users, costs, orders),
       "weeks" => weeks(users, costs, orders, tz, now),
-      "sources" => sources(users, costs, orders)
+      "sources" => sources(users, costs, orders),
+      "payers" => payers(raw["payers"], since)
     }
   end
+
+  @doc """
+  Accounts that paid within the window (any paid order since `since`), with the app's lifetime
+  totals, most paid first. Nil when the app doesn't export payers.
+  """
+  def payers(rows, since) when is_list(rows) do
+    rows
+    |> Enum.filter(&(is_map(&1) and num(&1["lastPaidAt"]) >= since))
+    |> Enum.map(fn p ->
+      credits = if is_map(p["credits"]), do: p["credits"], else: %{}
+      billing = country(p["billingCountry"])
+      signup = country(p["signupCountry"])
+      usd = num(p["usd"])
+      cost = num(p["costUsd"])
+
+      %{
+        "id" => p["id"],
+        "email" => p["email"],
+        "source" => source_key(p),
+        "platform" => p["platform"],
+        "country" => billing || signup,
+        "countryFrom" =>
+          cond do
+            billing -> "billing"
+            signup -> "sign-up"
+            true -> nil
+          end,
+        "plan" => blank_to_nil(p["plan"]),
+        "lastSku" => blank_to_nil(p["lastSku"]),
+        "orders" => num(p["orders"]),
+        "usd" => usd,
+        "refunds" => num(p["refunds"]),
+        "refundedUsd" => num(p["refundedUsd"]),
+        "new" => num(p["firstPaidAt"]) >= since,
+        "daysToPay" =>
+          if(is_number(p["firstPaidAt"]) and is_number(p["at"]),
+            do: max(div(p["firstPaidAt"] - p["at"], @day), 0)
+          ),
+        "lastPaidAt" => num(p["lastPaidAt"]),
+        "lastActiveAt" => if(is_number(p["lastActiveAt"]), do: p["lastActiveAt"]),
+        "creditsBought" => num(credits["bought"]),
+        "creditsGranted" => num(credits["granted"]),
+        "creditsUsed" => num(credits["used"]),
+        "creditsLeft" => num(credits["left"]),
+        "costUsd" => cost,
+        "margin" => usd - cost
+      }
+    end)
+    |> Enum.sort_by(&{-&1["usd"], -&1["lastPaidAt"]})
+  end
+
+  def payers(_, _), do: nil
+
+  defp country(c) when is_binary(c) do
+    c = c |> String.trim() |> String.upcase()
+    if String.match?(c, ~r/^[A-Z]{2}$/), do: c
+  end
+
+  defp country(_), do: nil
 
   @doc """
   First-touch source of an account: utm_source / ?ref= when set, else the referring site (search

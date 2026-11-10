@@ -8,6 +8,7 @@ defmodule PlausibleWeb.EconomicsView do
 
   def usd(nil), do: "—"
   def usd(n) when n == 0, do: "$0"
+  def usd(n) when n < 0, do: "-" <> usd(-n)
   def usd(n) when abs(n) < 1, do: "$" <> :erlang.float_to_binary(n / 1, decimals: 2)
   def usd(n) when abs(n) < 100, do: "$" <> :erlang.float_to_binary(n / 1, decimals: 2)
   def usd(n), do: "$" <> Integer.to_string(round(n))
@@ -88,6 +89,48 @@ defmodule PlausibleWeb.EconomicsView do
         <Heroicons.link :if={@icon == :link} class="w-4 h-4" />
       </span>
       <span title={@key}><%= @label %></span>
+    </span>
+    """
+  end
+
+  @doc "Plan, or the last thing bought, and the platform the account was made on."
+  def payer_plan(r) do
+    what = sku_label(r["plan"] || r["lastSku"])
+    platform = %{"ios" => "iOS", "android" => "Android", "web" => "Web"}[r["platform"]]
+    [what, platform] |> Enum.reject(&is_nil/1) |> Enum.join(" · ")
+  end
+
+  # creator_monthly → Creator monthly, pack_240 → 240 credits, gift_song_video → Gift song video
+  defp sku_label(nil), do: nil
+
+  defp sku_label("pack_" <> n), do: "#{n} credits"
+
+  defp sku_label(sku) do
+    sku |> String.replace("_", " ") |> String.capitalize()
+  end
+
+  def short_date(nil, _), do: "—"
+
+  def short_date(unix, tz) when is_number(unix) do
+    unix
+    |> trunc()
+    |> DateTime.from_unix!()
+    |> DateTime.shift_zone!(tz || "Etc/UTC")
+    |> Calendar.strftime("%b %-d")
+  end
+
+  attr(:code, :string, default: nil)
+  attr(:from, :string, default: nil)
+
+  @doc "Flag and name of an ISO country code; the tooltip says where it came from."
+  def country(assigns) do
+    c = assigns.code && Location.Country.get_country(assigns.code)
+    assigns = assign(assigns, c: c)
+
+    ~H"""
+    <span :if={!@code} class="text-gray-400">—</span>
+    <span :if={@code} title={if @from, do: "#{@code} · from #{@from}", else: @code}>
+      <%= if @c, do: "#{@c.flag} #{@c.name}", else: @code %>
     </span>
     """
   end

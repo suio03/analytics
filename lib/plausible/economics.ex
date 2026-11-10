@@ -111,5 +111,20 @@ defmodule Plausible.Economics do
     if free > 0, do: sum(full, "revenue") / free
   end
 
+  @doc "Summary tiles for the paying users section."
+  def payers_summary(payers) do
+    count = length(payers)
+    paid = sum(payers, "usd")
+
+    %{
+      count: count,
+      new: Enum.count(payers, & &1["new"]),
+      repeat: if(count > 0, do: Enum.count(payers, &(&1["orders"] >= 2)) / count),
+      per_payer: if(count > 0, do: paid / count),
+      margin: sum(payers, "margin"),
+      credits_left: sum(payers, "creditsLeft")
+    }
+  end
+
   defp sum(rows, key), do: Enum.reduce(rows, 0, &((&1[key] || 0) + &2))
 end

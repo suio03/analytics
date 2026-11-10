@@ -149,6 +149,63 @@ defmodule Plausible.Economics.ReportTest do
     assert Report.source_key(%{}) == "(direct or unknown)"
   end
 
+  test "payers: who paid in the window, with lifetime totals and a country" do
+    since = Report.since(@tz, 7, @now)
+    base = %{"at" => at(~U[2026-10-01 00:00:00Z]), "orders" => 1}
+
+    rows = [
+      Map.merge(base, %{
+        "id" => "big",
+        "email" => "big@example.com",
+        "referrer" => "www.google.com",
+        "billingCountry" => "us",
+        "signupCountry" => "GB",
+        "orders" => 3,
+        "usd" => 57,
+        "refunds" => 1,
+        "refundedUsd" => 19,
+        "firstPaidAt" => at(~U[2026-10-11 00:00:00Z]),
+        "lastPaidAt" => at(~U[2026-11-08 00:00:00Z]),
+        "plan" => "creator_monthly",
+        "credits" => %{"bought" => 720, "granted" => 15, "used" => 400, "left" => 335},
+        "costUsd" => 12.5
+      }),
+      Map.merge(base, %{
+        "id" => "new",
+        "signupCountry" => "AU",
+        "usd" => 12,
+        "firstPaidAt" => at(~U[2026-11-09 00:00:00Z]),
+        "lastPaidAt" => at(~U[2026-11-09 00:00:00Z])
+      }),
+      Map.merge(base, %{
+        "id" => "lapsed",
+        "usd" => 99,
+        "firstPaidAt" => at(~U[2026-10-02 00:00:00Z]),
+        "lastPaidAt" => at(~U[2026-10-02 00:00:00Z])
+      })
+    ]
+
+    assert [big, new] = Report.payers(rows, since)
+
+    assert %{
+             "country" => "US",
+             "countryFrom" => "billing",
+             "source" => "google",
+             "new" => false,
+             "daysToPay" => 10,
+             "creditsUsed" => 400,
+             "creditsLeft" => 335,
+             "margin" => 44.5
+           } = big
+
+    assert %{"country" => "AU", "countryFrom" => "sign-up", "new" => true, "costUsd" => 0} = new
+    assert Report.payers(nil, since) == nil
+    assert Report.build(@raw, @tz, 7, @now)["payers"] == nil
+
+    summary = Plausible.Economics.payers_summary([big, new])
+    assert %{count: 2, new: 1, repeat: 0.5, per_payer: 34.5, credits_left: 335} = summary
+  end
+
   test "raw? tells the export from a format 1 report" do
     assert Report.raw?(@raw)
     refute Report.raw?(%{"daily" => [], "weeks" => [], "sources" => []})

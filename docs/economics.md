@@ -21,6 +21,7 @@ The app exports facts: its accounts, what each one cost and what they paid. Only
 - `users`: accounts created since `since`: `id`, `at` (unix seconds), `guest` (anonymous account, counted in cost but not as a sign-up), first touch `source` (utm_source / ?ref=), `medium`, `campaign`, `referrer` (host), `landing`, `tracked` (`false` for accounts from before the app recorded first touches), `platform` (`web`, `ios`, `android`, or null)
 - `costs`: model cost since `since` in 15-minute buckets: `user` (null when the call has no account), `at` (bucket start), `free` (USD spent while the account had not paid yet), `paid` (USD spent after its first paid order)
 - `orders`: paid orders since `since`: `user`, `at`, `usd` (before payment fees), `first` (the account's first paid order), `sku`
+- `payers` (optional): every account that has ever paid, with lifetime totals: `id`, `email`, `at` (sign-up), `source`, `referrer`, `tracked`, `platform`, `signupCountry` (request country at sign-up), `billingCountry` (from the payment provider), `orders` and `usd` (paid orders), `refunds` and `refundedUsd`, `firstPaidAt`, `lastPaidAt`, `lastSku`, `plan` (current plan sku or null), `credits` (`bought`, `granted` free, `used`, `left` usable now), `costUsd` (all model cost), `jobs`, `lastActiveAt`
 
 Fields beyond these are ignored, so an app can add facts before the page uses them. Add fields; never change what one means.
 
@@ -33,6 +34,8 @@ The window is the last N local days including today (7, 28, 90 or 180; 28 by def
 An app that ignores `format` and returns `daily`, `weeks` and `sources` is shown as it computed them, in UTC days. Keys: `generatedAt`, `days`, `cohortDays`, `notes`; `daily`: `day`, `signups`, `freeUsd`, `paidUsd`, `orders`, `firstOrders`, `revenue`, newest first; `weeks` and `sources`: `key`, `signups`, `buyers`, `freeUsd`, `revenue`, `freePerSignup`, `revenuePerSignup`, `payback`, weeks also `age`.
 
 ## Page
+
+**Paying users** lists accounts with a paid order in the window (lifetime totals), most paid first: country (billing, else sign-up), source, payments and refunds, credits used and left, model cost and margin (paid minus model cost), days from sign-up to first payment, and last activity. Its tiles: paying users and how many paid for the first time, paid per user, repeat buyers (two or more payments), total margin and unused credits. The section shows only when the app exports `payers`. Emails are shown, so the page stays owners and admins only.
 
 Payback is colored red below 1× and amber below 3×, only for weeks that have had their full window and sources with at least 10 sign-ups.
 

@@ -162,11 +162,36 @@ defmodule PlausibleWeb.EconomicsControllerTest do
         "notes" => ["Free cost: model calls."],
         "users" => [%{"id" => "u1", "at" => now - 60, "source" => "taaft"}],
         "costs" => [%{"user" => "u1", "at" => now - 60, "free" => 0.42, "paid" => 0}],
-        "orders" => []
+        "orders" => [],
+        "payers" => [
+          %{
+            "id" => "p1",
+            "email" => "buyer@example.com",
+            "at" => now - 86_400 * 3,
+            "source" => "google",
+            "platform" => "ios",
+            "billingCountry" => "DE",
+            "orders" => 2,
+            "usd" => 31,
+            "refunds" => 0,
+            "firstPaidAt" => now - 86_400,
+            "lastPaidAt" => now - 3600,
+            "plan" => "creator_monthly",
+            "credits" => %{"bought" => 480, "granted" => 15, "used" => 123, "left" => 372},
+            "costUsd" => 40.5,
+            "lastActiveAt" => now - 60
+          }
+        ]
       })
     end)
 
     html = get(conn, "/economics.example/economics?days=7") |> html_response(200)
+    assert html =~ ~s(data-economics-section="payers")
+    assert html =~ "buyer@example.com"
+    assert html =~ "Germany"
+    assert html =~ "Creator monthly · iOS"
+    assert html =~ "372"
+    assert html =~ "-$9.50"
     assert html =~ "Day (Melbourne)"
     assert html =~ "Melbourne time"
     assert html =~ "There&#39;s An AI For That"
