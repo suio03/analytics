@@ -146,6 +146,55 @@ defmodule Plausible.EdgeRequestsTest do
     assert report.categories == %{"search" => 23, "browser" => 2}
   end
 
+  test "reads each zone with the token of the account that has it" do
+    Application.put_env(:plausible, EdgeRequests,
+      token: "token-a, token-b,bad",
+      plug: {Req.Test, __MODULE__}
+    )
+
+    test_pid = self()
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      [auth] = Plug.Conn.get_req_header(conn, "authorization")
+
+      case {conn.request_path, auth} do
+        {_, "Bearer bad"} ->
+          Plug.Conn.send_resp(conn, 403, "")
+
+        {"/client/v4/zones", "Bearer token-a"} ->
+          Req.Test.json(conn, %{
+            "result" => [%{"id" => "zone-a", "name" => "example.com"}],
+            "result_info" => %{"total_pages" => 1}
+          })
+
+        {"/client/v4/zones", "Bearer token-b"} ->
+          Req.Test.json(conn, %{
+            "result" => [%{"id" => "zone-b", "name" => "other.org"}],
+            "result_info" => %{"total_pages" => 1}
+          })
+
+        {"/client/v4/graphql", auth} ->
+          {:ok, body, conn} = Plug.Conn.read_body(conn)
+          send(test_pid, {:graphql, auth, Jason.decode!(body)["variables"]["zone"]})
+
+          Req.Test.json(conn, %{
+            "data" => %{"viewer" => %{"zones" => [%{"totals" => [], "agents" => []}]}},
+            "errors" => nil
+          })
+      end
+    end)
+
+    insert(:site, domain: "example.com")
+    insert(:site, domain: "other.org")
+
+    results = EdgeRequests.sync_all(~D[2026-11-12], 1)
+    assert {"example.com", {:ok, 0}} in results
+    assert {"other.org", {:ok, 0}} in results
+
+    assert_received {:graphql, "Bearer token-a", "zone-a"}
+    assert_received {:graphql, "Bearer token-b", "zone-b"}
+  end
+
   test "reports Cloudflare errors" do
     Req.Test.stub(__MODULE__, fn conn ->
       case conn.request_path do

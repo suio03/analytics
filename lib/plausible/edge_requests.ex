@@ -26,7 +26,9 @@ defmodule Plausible.EdgeRequests do
 
   Counts are Cloudflare's sampled estimates of HTML responses to real clients
   (`requestSource: eyeball`) on the site's host and its `www.` twin, per UTC day.
-  Off unless `CLOUDFLARE_API_TOKEN` is set.
+  Off unless `CLOUDFLARE_API_TOKEN` is set. Sites on several Cloudflare
+  accounts: give one token per account, separated by commas; each zone is read
+  with the token that listed it.
   """
   import Ecto.Query
 
@@ -53,9 +55,15 @@ defmodule Plausible.EdgeRequests do
   }
   """
 
-  def enabled?, do: token() not in [nil, ""]
+  def enabled?, do: tokens() != []
 
-  defp token, do: Keyword.get(config(), :token)
+  defp tokens do
+    (Keyword.get(config(), :token) || "")
+    |> String.split(",", trim: true)
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+  end
+
   defp config, do: Application.get_env(:plausible, __MODULE__, [])
 
   @doc "Fetches the last `days` UTC days (today included) for every site with a zone."
@@ -64,7 +72,7 @@ defmodule Plausible.EdgeRequests do
          {:ok, zones} <- zones() do
       sites = Repo.all(from(s in Plausible.Site, select: %{id: s.id, domain: s.domain}))
 
-      for site <- sites, zone = zone_for(site.domain, zones), zone != nil do
+      for site <- sites, zone = find_zone(site.domain, zones), zone != nil do
         {site.domain, sync_site(site, zone, today, days)}
       end
     else
@@ -73,11 +81,19 @@ defmodule Plausible.EdgeRequests do
     end
   end
 
-  @doc "Fetches and stores one site's days. Returns `{:ok, rows}` or `{:error, reason}`."
-  def sync_site(site, zone_id, today, days) do
+  @doc """
+  Fetches and stores one site's days from a zone (`%{id, token}` from
+  `zones/0`, or a zone id read with the first token). Returns `{:ok, rows}`
+  or `{:error, reason}`.
+  """
+  def sync_site(site, zone_id, today, days) when is_binary(zone_id) do
+    sync_site(site, %{id: zone_id, token: hd(tokens())}, today, days)
+  end
+
+  def sync_site(site, %{id: zone_id, token: token}, today, days) do
     since = Date.add(today, -(days - 1))
 
-    with {:ok, data} <- fetch(zone_id, hosts(site.domain), since, today) do
+    with {:ok, data} <- fetch(token, zone_id, hosts(site.domain), since, today) do
       rows = rows(data, site.id)
 
       Repo.transaction(fn ->
@@ -100,24 +116,42 @@ defmodule Plausible.EdgeRequests do
 
   @doc "The zone id whose name is the longest suffix of `domain`, or nil."
   def zone_for(domain, zones) do
-    zones
-    |> Enum.filter(fn %{name: name} ->
-      domain == name or String.ends_with?(domain, "." <> name)
-    end)
-    |> Enum.max_by(&String.length(&1.name), fn -> nil end)
-    |> case do
+    case find_zone(domain, zones) do
       nil -> nil
       %{id: id} -> id
     end
   end
 
-  @doc "All zones the token can read, as `[%{id, name}]`."
-  def zones(page \\ 1, acc \\ []) do
-    case request(:get, "/zones", params: [per_page: 50, page: page]) do
-      {:ok, %{"result" => result, "result_info" => info}} when is_list(result) ->
-        acc = acc ++ Enum.map(result, &%{id: &1["id"], name: &1["name"]})
+  defp find_zone(domain, zones) do
+    zones
+    |> Enum.filter(fn %{name: name} ->
+      domain == name or String.ends_with?(domain, "." <> name)
+    end)
+    |> Enum.max_by(&String.length(&1.name), fn -> nil end)
+  end
 
-        if page < (info["total_pages"] || 1), do: zones(page + 1, acc), else: {:ok, acc}
+  @doc """
+  All zones the tokens can read, as `[%{id, name, token}]`. A token that fails
+  is skipped while another one works, so one revoked token doesn't stop the
+  other accounts.
+  """
+  def zones do
+    results = Enum.map(tokens(), &zones(&1, 1, []))
+
+    case Enum.filter(results, &match?({:ok, _}, &1)) do
+      [] -> List.first(results, {:error, :disabled})
+      ok -> {:ok, ok |> Enum.flat_map(fn {:ok, zs} -> zs end) |> Enum.uniq_by(& &1.id)}
+    end
+  end
+
+  defp zones(token, page, acc) do
+    case request(token, :get, "/zones", params: [per_page: 50, page: page]) do
+      {:ok, %{"result" => result, "result_info" => info}} when is_list(result) ->
+        acc = acc ++ Enum.map(result, &%{id: &1["id"], name: &1["name"], token: token})
+
+        if page < (info["total_pages"] || 1),
+          do: zones(token, page + 1, acc),
+          else: {:ok, acc}
 
       {:ok, _} ->
         {:error, "Cloudflare returned no zones."}
@@ -127,7 +161,7 @@ defmodule Plausible.EdgeRequests do
     end
   end
 
-  defp fetch(zone_id, hosts, since, until) do
+  defp fetch(token, zone_id, hosts, since, until) do
     body = %{
       query: @query,
       variables: %{
@@ -138,7 +172,7 @@ defmodule Plausible.EdgeRequests do
       }
     }
 
-    case request(:post, "/graphql", json: body) do
+    case request(token, :post, "/graphql", json: body) do
       {:ok, %{"data" => %{"viewer" => %{"zones" => [zone]}}, "errors" => errors}}
       when errors in [nil, []] ->
         {:ok, zone}
@@ -154,12 +188,12 @@ defmodule Plausible.EdgeRequests do
     end
   end
 
-  defp request(method, path, opts) do
+  defp request(token, method, path, opts) do
     req =
       [
         method: method,
         url: @api <> path,
-        headers: [{"authorization", "Bearer #{token()}"}],
+        headers: [{"authorization", "Bearer #{token}"}],
         receive_timeout: 30_000,
         retry: false
       ] ++ opts ++ Keyword.take(config(), [:plug])

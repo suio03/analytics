@@ -19,3 +19,7 @@ keeps daily counts in Postgres (`edge_requests`), so they outlive Cloudflare's r
 Off unless `CLOUDFLARE_API_TOKEN` is set. Create a token with **Zone → Zone → Read** and
 **Zone → Analytics → Read** for the zones to include, and set it in the app's environment.
 Sites without a matching zone are skipped.
+
+Zones on several Cloudflare accounts: create one such token per account and set them
+comma-separated (`CLOUDFLARE_API_TOKEN=tokenA,tokenB`). Each zone is read with the token
+that listed it; a token that fails is skipped while another one works.
