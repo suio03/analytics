@@ -1,0 +1,292 @@
+<.frame site={@site} active="traffic">
+  <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Traffic quality</h1>
+      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+        How visits were classified, and the crawlers the tracker can't see. UTC days, today so far.
+      </p>
+    </div>
+    <span class="flex gap-2 text-sm">
+      <a
+        :for={d <- @windows}
+        href={path(@site, "?days=#{d}")}
+        aria-current={if d == @days, do: "page"}
+        class={
+          if d == @days,
+            do: "font-semibold text-indigo-600 dark:text-indigo-400",
+            else: "text-gray-500 hover:text-indigo-600"
+        }
+      >
+        <%= d %>d
+      </a>
+    </span>
+  </div>
+
+  <% totals = @quality.totals %>
+  <% all = all_sessions(totals) %>
+  <% browsers = Map.get(@edge.categories, "browser", 0) %>
+  <% tracked = all_pageviews(totals) %>
+
+  <section class="mb-10">
+    <h2 class="text-lg font-semibold mb-1">Alerts</h2>
+    <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+      <%= Calendar.strftime(@alerts_day, "%a %b %-d") %> (UTC), checked against the 14 days before it.
+    </p>
+    <p
+      :if={@alerts == []}
+      class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-sm text-gray-500 dark:text-gray-400"
+    >
+      Nothing unusual.
+    </p>
+    <ul :if={@alerts != []} class="space-y-2">
+      <li :for={a <- @alerts} class={"rounded-lg border p-4 text-sm #{alert_class(a.level)}"}>
+        <span class="font-semibold"><%= a.title %></span> · <%= a.detail %>
+      </li>
+    </ul>
+  </section>
+
+  <section class="mb-10">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+      <div>
+        <h2 class="text-lg font-semibold">Written summary</h2>
+        <p class="text-xs text-gray-500 dark:text-gray-400">
+          Claude reads the numbers on this page for the <%= @days %>-day window and explains them. It only quotes figures from them.
+        </p>
+      </div>
+      <form
+        :if={@report_enabled}
+        method="post"
+        action={path(@site, "/report")}
+        class="flex items-center gap-2"
+      >
+        <input type="hidden" name="_csrf_token" value={csrf()} />
+        <input type="hidden" name="days" value={@days} />
+        <select
+          name="language"
+          class="text-sm rounded-md border-gray-300 dark:bg-gray-800 dark:border-gray-600"
+        >
+          <option value="en">English</option>
+          <option value="zh">中文</option>
+        </select>
+        <button type="submit" class="button">Write summary</button>
+      </form>
+    </div>
+    <p
+      :if={not @report_enabled}
+      class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-sm text-gray-500 dark:text-gray-400"
+    >
+      Set <code>ANTHROPIC_API_KEY</code> on the server to enable written summaries.
+    </p>
+    <%= case @report do %>
+      <% {:ok, report} -> %>
+        <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 text-sm leading-6 space-y-1">
+          <p :for={line <- report_lines(report.text)} class={line_class(line)}>
+            <%= line_text(line) %>
+          </p>
+          <p :if={report.ungrounded != []} class="pt-3 text-xs text-amber-700 dark:text-amber-400">
+            Not found in the data, check before relying on them: <%= Enum.join(
+              report.ungrounded,
+              ", "
+            ) %>
+          </p>
+        </div>
+      <% {:error, message} -> %>
+        <p class="rounded-lg border p-4 text-sm border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+          <%= message %>
+        </p>
+      <% nil -> %>
+    <% end %>
+  </section>
+
+  <section class="mb-10">
+    <h2 class="text-lg font-semibold mb-3">Summary</h2>
+    <div class="grid grid-cols-2 lg:grid-cols-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 divide-x divide-gray-100 dark:divide-gray-700">
+      <.stat
+        label="Human sessions"
+        value={num(sessions(totals, "human"))}
+        note={"#{pct(sessions(totals, "human"), all)} of #{num(all)} tracked"}
+      />
+      <.stat
+        label="Suspicious · bot sessions"
+        value={"#{num(sessions(totals, "suspicious"))} · #{num(sessions(totals, "bot"))}"}
+        note={"#{pct(sessions(totals, "suspicious") + sessions(totals, "bot"), all)} of tracked sessions"}
+      />
+      <.stat
+        label="Crawler page requests"
+        value={if @edge.total > 0, do: num(bots(@edge.categories)), else: "—"}
+        note={
+          if @edge.total > 0,
+            do: "#{num(ai(@edge.categories))} from AI crawlers · Cloudflare",
+            else: "Needs Cloudflare"
+        }
+      />
+      <.stat
+        label="Browser page loads tracked"
+        value={if browsers > 0, do: pct(tracked, browsers), else: "—"}
+        note={
+          if browsers > 0,
+            do: "#{num(tracked)} pageviews of #{num(browsers)} HTML loads",
+            else: "Needs Cloudflare"
+        }
+      />
+    </div>
+  </section>
+
+  <section class="mb-10">
+    <h2 class="text-lg font-semibold mb-1">By day</h2>
+    <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+      Tracked sessions by class next to the HTML pages Cloudflare served.
+      Single-page apps load HTML once per visit, so pageviews can exceed browser loads.
+    </p>
+    <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-x-auto">
+      <table class="w-full text-sm text-left tabular-nums">
+        <thead class="bg-gray-50 dark:bg-gray-850 text-xs text-gray-500 dark:text-gray-400">
+          <tr>
+            <th class="px-4 py-3 font-medium">Day</th>
+            <th class="px-4 py-3 font-medium text-right">Human</th>
+            <th class="px-4 py-3 font-medium text-right">Suspicious</th>
+            <th class="px-4 py-3 font-medium text-right">Bot</th>
+            <th class="px-4 py-3 font-medium text-right">Pageviews</th>
+            <th :if={@edge.total > 0} class="px-4 py-3 font-medium text-right">Browser loads</th>
+            <th :if={@edge.total > 0} class="px-4 py-3 font-medium text-right">AI crawlers</th>
+            <th :if={@edge.total > 0} class="px-4 py-3 font-medium text-right">Other crawlers</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+          <tr :for={day <- days_desc(@quality.since, @quality.until)}>
+            <% q = Map.get(@quality.daily, day, %{}) %>
+            <% e = Map.get(@edge.daily, day, %{}) %>
+            <td class="px-4 py-2 whitespace-nowrap">
+              <%= Calendar.strftime(day, "%a %b %-d") %>
+              <span :if={day == @quality.until} class="text-xs text-gray-400">so far</span>
+            </td>
+            <td class="px-4 py-2 text-right"><%= num(sessions(q, "human")) %></td>
+            <td class="px-4 py-2 text-right"><%= num(sessions(q, "suspicious")) %></td>
+            <td class="px-4 py-2 text-right"><%= num(sessions(q, "bot")) %></td>
+            <td class="px-4 py-2 text-right"><%= num(all_pageviews(q)) %></td>
+            <td :if={@edge.total > 0} class="px-4 py-2 text-right">
+              <%= num(Map.get(e, "browser", 0)) %>
+            </td>
+            <td :if={@edge.total > 0} class="px-4 py-2 text-right"><%= num(ai(e)) %></td>
+            <td :if={@edge.total > 0} class="px-4 py-2 text-right">
+              <%= num(bots(e) - ai(e)) %>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="mb-10">
+    <h2 class="text-lg font-semibold mb-1">Reasons</h2>
+    <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+      Sessions carrying each signal and the class they ended up in. Evidence-only signals are recorded
+      without changing the class, so a high human count there means the signal would misfire.
+    </p>
+    <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-x-auto">
+      <table class="w-full text-sm text-left tabular-nums">
+        <thead class="bg-gray-50 dark:bg-gray-850 text-xs text-gray-500 dark:text-gray-400">
+          <tr>
+            <th class="px-4 py-3 font-medium">Signal</th>
+            <th class="px-4 py-3 font-medium">Effect</th>
+            <th class="px-4 py-3 font-medium text-right">Sessions</th>
+            <th class="px-4 py-3 font-medium text-right">Human</th>
+            <th class="px-4 py-3 font-medium text-right">Suspicious</th>
+            <th class="px-4 py-3 font-medium text-right">Bot</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+          <tr :if={@quality.reasons == []}>
+            <td colspan="6" class="px-4 py-6 text-center text-gray-500">
+              No signals in this window.
+            </td>
+          </tr>
+          <tr :for={r <- @quality.reasons}>
+            <td class="px-4 py-2">
+              <code class="text-xs"><%= r.reason %></code>
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                <%= reason_description(r.reason) %>
+              </p>
+            </td>
+            <td class="px-4 py-2 whitespace-nowrap">
+              <span class={"px-2 py-0.5 rounded text-xs #{effect_class(reason_effect(r.reason))}"}>
+                <%= effect_label(reason_effect(r.reason)) %>
+              </span>
+            </td>
+            <td class="px-4 py-2 text-right"><%= num(r.sessions) %></td>
+            <td class="px-4 py-2 text-right"><%= num(Map.get(r.by_class, "human", 0)) %></td>
+            <td class="px-4 py-2 text-right"><%= num(Map.get(r.by_class, "suspicious", 0)) %></td>
+            <td class="px-4 py-2 text-right"><%= num(Map.get(r.by_class, "bot", 0)) %></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="mb-10">
+    <h2 class="text-lg font-semibold mb-1">Crawlers at the edge</h2>
+    <p :if={@edge.total > 0} class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+      HTML pages Cloudflare served to each client, whether or not it ran the tracker. Cloudflare's sampled estimates · synced <%= synced(
+        @edge.synced_at
+      ) %>.
+    </p>
+
+    <div
+      :if={@edge.total == 0}
+      class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-8 text-sm text-gray-500 dark:text-gray-400"
+    >
+      <%= cond do %>
+        <% !@edge_enabled -> %>
+          Set <code>CLOUDFLARE_API_TOKEN</code>
+          (a read-only token with Zone Read and Analytics Read) to count crawlers that never run the tracker:
+          AI training and AI search bots, link previews, SEO tools and scrapers.
+        <% @edge.synced_at -> %>
+          No HTML requests from Cloudflare in this window.
+        <% true -> %>
+          No data yet. The site's domain must be in a Cloudflare zone the token can read; requests sync every six hours.
+      <% end %>
+    </div>
+
+    <div :if={@edge.total > 0} class="grid gap-6 lg:grid-cols-2">
+      <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-x-auto">
+        <table class="w-full text-sm text-left tabular-nums">
+          <thead class="bg-gray-50 dark:bg-gray-850 text-xs text-gray-500 dark:text-gray-400">
+            <tr>
+              <th class="px-4 py-3 font-medium">Category</th>
+              <th class="px-4 py-3 font-medium text-right">Requests</th>
+              <th class="px-4 py-3 font-medium text-right">Share</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+            <tr :for={c <- Enum.filter(categories(), &(Map.get(@edge.categories, &1, 0) > 0))}>
+              <td class="px-4 py-2"><%= category_label(c) %></td>
+              <td class="px-4 py-2 text-right"><%= num(@edge.categories[c]) %></td>
+              <td class="px-4 py-2 text-right"><%= pct(@edge.categories[c], @edge.total) %></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-x-auto">
+        <table class="w-full text-sm text-left tabular-nums">
+          <thead class="bg-gray-50 dark:bg-gray-850 text-xs text-gray-500 dark:text-gray-400">
+            <tr>
+              <th class="px-4 py-3 font-medium">Crawler</th>
+              <th class="px-4 py-3 font-medium">Category</th>
+              <th class="px-4 py-3 font-medium text-right">Requests</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+            <tr :for={a <- Enum.take(@edge.agents, 30)}>
+              <td class="px-4 py-2"><%= a.agent %></td>
+              <td class="px-4 py-2 text-gray-500 dark:text-gray-400">
+                <%= category_label(a.category) %>
+              </td>
+              <td class="px-4 py-2 text-right"><%= num(a.requests) %></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</.frame>

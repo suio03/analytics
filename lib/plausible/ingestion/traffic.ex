@@ -12,6 +12,11 @@ defmodule Plausible.Ingestion.Traffic do
     * `2` - bot: one strong signal, e.g. a known crawler user agent, a
       headless browser or a tracker reported `navigator.webdriver`
 
+  Some signals are suspicious on their own (a structurally forged search
+  engine referrer), and some are only recorded as evidence in
+  `traffic_reasons` without changing the class (missing browser request
+  headers) until live traffic shows they don't misfire on real visitors.
+
   Nothing is dropped any more: dashboards show humans by default and can
   switch to the other classes.
   """
@@ -65,22 +70,102 @@ defmodule Plausible.Ingestion.Traffic do
   """
   @spec classify(Request.t(), term()) :: {0 | 1 | 2, [String.t()]}
   def classify(%Request{} = request, user_agent) do
+    datacenter? = DatacenterIP.datacenter?(request.remote_ip)
+
     signals =
       user_agent_signals(request, user_agent) ++
         automation_signals(request.automation) ++
-        ip_signals(request.remote_ip)
+        ip_signals(datacenter?) ++
+        search_referrer_signals(request, datacenter?) ++
+        header_signals(request, user_agent)
 
     reasons = Enum.map(signals, &elem(&1, 0))
+
+    weak = Enum.count(signals, &(elem(&1, 1) == :suspicious))
 
     class =
       cond do
         Enum.any?(signals, &(elem(&1, 1) == :bot)) -> @bot
-        Enum.count(signals, &(elem(&1, 1) == :suspicious)) >= @suspicious_threshold -> @suspicious
+        Enum.any?(signals, &(elem(&1, 1) == :strong)) -> @suspicious
+        weak >= @suspicious_threshold -> @suspicious
         true -> @human
       end
 
     {class, reasons}
   end
+
+  # A visit claiming to come from a search engine. Real organic clicks come
+  # from home and mobile networks, over https, and Google trims its referrer
+  # to the bare origin. Scrapers that set `referer: google.com` to pass as
+  # organic search break one of these.
+  defp search_referrer_signals(%Request{event_name: "pageview", referrer: referrer}, datacenter?)
+       when is_binary(referrer) do
+    with {:ok, %URI{host: host} = uri} when is_binary(host) <- URI.new(String.trim(referrer)),
+         engine when not is_nil(engine) <- search_engine(String.downcase(host)) do
+      datacenter = if datacenter?, do: [{"search_ref_datacenter", :suspicious}], else: []
+      datacenter ++ forged_search_referrer(engine, uri)
+    else
+      _ -> []
+    end
+  end
+
+  defp search_referrer_signals(_request, _datacenter?), do: []
+
+  defp forged_search_referrer(engine, %URI{scheme: scheme, path: path, query: query}) do
+    query_leak =
+      engine == :google and
+        ((is_binary(query) and query != "") or (is_binary(path) and path =~ ~r{^/search\b}))
+
+    if scheme == "http" or query_leak,
+      do: [{"forged_search_referrer", :strong}],
+      else: []
+  end
+
+  @search_engine_hosts ~w(bing.com duckduckgo.com yahoo.com search.yahoo.com baidu.com
+                          m.baidu.com ecosia.org search.brave.com qwant.com startpage.com
+                          sogou.com so.com)
+
+  @doc false
+  def search_engine(host) do
+    host = String.replace_prefix(host, "www.", "")
+
+    cond do
+      host =~ ~r/^google\.[a-z.]{2,}$/ -> :google
+      host =~ ~r/^yandex\.[a-z.]{2,}$/ -> :other
+      host in @search_engine_hosts -> :other
+      true -> nil
+    end
+  end
+
+  # Every current browser sends Sec-Fetch-* headers with the tracker's request
+  # and Chromium 90+ sends Sec-CH-UA; HTTP clients behind a spoofed user agent
+  # usually don't. Recorded as evidence only. Skipped when a site-side proxy
+  # relayed the event, as it may not forward these headers.
+  defp header_signals(%Request{event_name: "pageview", proxied: false} = request, user_agent) do
+    case user_agent do
+      %UAInspector.Result{client: %UAInspector.Result.Client{type: "browser"} = client} ->
+        no_sec_fetch = if request.browser_headers, do: [], else: [{"no_sec_fetch", :evidence}]
+
+        no_client_hints =
+          if not request.client_hints and modern_blink?(client),
+            do: [{"no_client_hints", :evidence}],
+            else: []
+
+        no_sec_fetch ++ no_client_hints
+
+      _ ->
+        []
+    end
+  end
+
+  defp header_signals(_request, _user_agent), do: []
+
+  defp modern_blink?(%UAInspector.Result.Client{engine: "Blink", engine_version: version})
+       when is_binary(version) do
+    match?({major, _} when major >= 90, Integer.parse(version))
+  end
+
+  defp modern_blink?(_), do: false
 
   defp user_agent_signals(request, user_agent) do
     ua_string = request.user_agent || ""
@@ -174,7 +259,7 @@ defmodule Plausible.Ingestion.Traffic do
 
   defp automation_signals(_), do: []
 
-  defp ip_signals(ip) do
-    if DatacenterIP.datacenter?(ip), do: [{"datacenter_ip", :suspicious}], else: []
+  defp ip_signals(datacenter?) do
+    if datacenter?, do: [{"datacenter_ip", :suspicious}], else: []
   end
 end

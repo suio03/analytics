@@ -139,6 +139,7 @@ defmodule Plausible.Session.CacheStore do
       traffic: Map.get(session_attributes, :traffic, 0),
       traffic_reasons: Map.get(session_attributes, :traffic_reasons, []),
       interacted: interacted(session_attributes),
+      network: Map.get(session_attributes, :network, 0),
       timestamp: event.timestamp,
       start: event.timestamp,
       "entry_meta.key": Map.get(event, :"meta.key"),

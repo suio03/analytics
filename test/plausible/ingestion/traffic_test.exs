@@ -14,6 +14,8 @@ defmodule Plausible.Ingestion.TrafficTest do
       event_name: "pageview",
       automation: 0,
       referrer: "https://www.google.com/",
+      browser_headers: true,
+      client_hints: true,
       timestamp: ~N[2024-11-20 00:00:00]
     }
 
@@ -43,7 +45,8 @@ defmodule Plausible.Ingestion.TrafficTest do
     end
 
     test "a datacenter IP alone does not change the class" do
-      assert {0, ["datacenter_ip"]} = classify(%{user_agent: @chrome, remote_ip: "3.0.0.1"})
+      assert {0, ["datacenter_ip"]} =
+               classify(%{user_agent: @chrome, remote_ip: "3.0.0.1", referrer: nil})
     end
 
     test "a single tracker headless hint stays human, two are suspicious" do
@@ -99,6 +102,83 @@ defmodule Plausible.Ingestion.TrafficTest do
 
       assert {0, []} =
                classify(%{user_agent: @old_chrome_mobile, referrer: nil, timestamp: @nov_2026})
+    end
+
+    test "a search engine referrer from a datacenter IP is suspicious" do
+      assert {1, ["datacenter_ip", "search_ref_datacenter"]} =
+               classify(%{user_agent: @chrome, remote_ip: "3.0.0.1"})
+
+      assert {0, ["datacenter_ip"]} =
+               classify(%{
+                 user_agent: @chrome,
+                 remote_ip: "3.0.0.1",
+                 referrer: "https://news.ycombinator.com/"
+               })
+    end
+
+    test "a structurally forged search engine referrer is suspicious on its own" do
+      for referrer <- [
+            "http://www.google.com/",
+            "https://www.google.com/search?q=ai+image+extender",
+            "https://www.google.co.uk/?q=x",
+            "http://www.bing.com/"
+          ] do
+        assert {1, ["forged_search_referrer"]} =
+                 classify(%{user_agent: @chrome, remote_ip: "81.2.69.142", referrer: referrer}),
+               referrer
+      end
+    end
+
+    test "genuine search engine referrers stay human" do
+      for referrer <- [
+            "https://www.google.com/",
+            "https://www.google.com.hk/",
+            "https://www.bing.com/search?q=x",
+            "https://duckduckgo.com/",
+            "android-app://com.google.android.googlequicksearchbox/"
+          ] do
+        assert {0, []} =
+                 classify(%{user_agent: @chrome, remote_ip: "81.2.69.142", referrer: referrer}),
+               referrer
+      end
+    end
+
+    test "search referrer checks only apply to pageviews" do
+      assert {0, []} =
+               classify(%{
+                 event_name: "signup",
+                 user_agent: @chrome,
+                 referrer: "http://www.google.com/"
+               })
+    end
+
+    test "missing browser headers are recorded as evidence only" do
+      assert {0, ["no_sec_fetch", "no_client_hints"]} =
+               classify(%{user_agent: @chrome, browser_headers: false, client_hints: false})
+
+      safari =
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+
+      assert {0, []} = classify(%{user_agent: safari, client_hints: false})
+    end
+
+    test "browser headers are not judged for proxied events" do
+      assert {0, []} =
+               classify(%{
+                 user_agent: @chrome,
+                 browser_headers: false,
+                 client_hints: false,
+                 proxied: true
+               })
+    end
+
+    test "recognizes search engine hosts" do
+      assert Traffic.search_engine("www.google.de") == :google
+      assert Traffic.search_engine("google.co.jp") == :google
+      assert Traffic.search_engine("yandex.ru") == :other
+      assert Traffic.search_engine("www.bing.com") == :other
+      assert Traffic.search_engine("googleusercontent.com") == nil
+      assert Traffic.search_engine("mail.google.com") == nil
     end
   end
 

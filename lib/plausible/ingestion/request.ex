@@ -52,6 +52,16 @@ defmodule Plausible.Ingestion.Request do
     field :automation, :integer, default: 0
     field :interacted, :boolean, default: false
 
+    # Request headers used for traffic classification. `browser_headers`
+    # tells whether the request carried any Sec-Fetch-* header (every current
+    # browser sends them with fetch/XHR), `client_hints` whether it carried
+    # Sec-CH-UA (Chromium 90+ sends it on HTTPS). `proxied` is set when the
+    # event was relayed by a site-side proxy (X-Plausible-IP), which may drop
+    # those headers, so they are not judged then.
+    field :browser_headers, :boolean, default: false
+    field :client_hints, :boolean, default: false
+    field :proxied, :boolean, default: false
+
     field :timestamp, :naive_datetime
   end
 
@@ -78,6 +88,7 @@ defmodule Plausible.Ingestion.Request do
         |> put_uri(request_body)
         |> put_hostname()
         |> put_user_agent(conn)
+        |> put_browser_headers(conn)
         |> put_request_params(request_body)
         |> put_referrer(request_body)
         |> put_props(request_body)
@@ -289,6 +300,18 @@ defmodule Plausible.Ingestion.Request do
       |> List.first()
 
     Changeset.put_change(changeset, :user_agent, user_agent)
+  end
+
+  defp put_browser_headers(changeset, %Plug.Conn{} = conn) do
+    has? = fn name -> Plug.Conn.get_req_header(conn, name) != [] end
+
+    changeset
+    |> Changeset.put_change(
+      :browser_headers,
+      has?.("sec-fetch-mode") or has?.("sec-fetch-site") or has?.("sec-fetch-dest")
+    )
+    |> Changeset.put_change(:client_hints, has?.("sec-ch-ua"))
+    |> Changeset.put_change(:proxied, has?.("x-plausible-ip"))
   end
 
   defp get_pathname(nil, _hash_mode), do: "/"

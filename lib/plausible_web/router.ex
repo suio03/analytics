@@ -227,6 +227,7 @@ defmodule PlausibleWeb.Router do
     get "/properties", AdminEventsController, :properties
     post "/properties", AdminEventsController, :add_properties
     get "/paths", AdminEventsController, :paths
+    get "/traffic", AdminEventsController, :traffic
     get "/replays", AdminEventsController, :replays
     get "/replays/:session_id", AdminEventsController, :replay
     get "/events", AdminEventsController, :index
@@ -493,6 +494,8 @@ defmodule PlausibleWeb.Router do
     get "/:domain/economics", EconomicsController, :index
     get "/:domain/economics/settings", EconomicsController, :settings
     post "/:domain/economics/settings", EconomicsController, :save
+    get "/:domain/traffic", TrafficController, :index
+    post "/:domain/traffic/report", TrafficController, :report
 
     get "/:domain/settings", SiteController, :settings
     get "/:domain/settings/general", SiteController, :settings_general

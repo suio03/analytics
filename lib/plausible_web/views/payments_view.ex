@@ -65,7 +65,8 @@ defmodule PlausibleWeb.PaymentsView do
           :for={
             {label, href, tab} <- [
               {"Transactions", path(@site), "transactions"},
-              {"Economics", "/#{URI.encode_www_form(@site.domain)}/economics", "economics"}
+              {"Economics", "/#{URI.encode_www_form(@site.domain)}/economics", "economics"},
+              {"Traffic quality", "/#{URI.encode_www_form(@site.domain)}/traffic", "traffic"}
             ]
           }
           href={href}

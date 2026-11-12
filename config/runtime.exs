@@ -508,6 +508,13 @@ config :plausible, :google,
   api_url: "https://www.googleapis.com",
   reporting_api_url: "https://analyticsreporting.googleapis.com"
 
+# Read-only Cloudflare token (Zone: Read, Analytics: Read) for edge requests by crawler.
+config :plausible, Plausible.EdgeRequests,
+  token: get_var_from_path_or_env(config_dir, "CLOUDFLARE_API_TOKEN")
+
+config :plausible, Plausible.TrafficReport,
+  api_key: get_var_from_path_or_env(config_dir, "ANTHROPIC_API_KEY")
+
 config :plausible, Plausible.HelpScout,
   app_id: help_scout_app_id,
   app_secret: help_scout_app_secret,
@@ -703,7 +710,11 @@ base_cron = [
   # Every 2 hours
   {"0 */2 * * *", Plausible.Workers.ExpireDomainChangeTransitions},
   # Daily at midnight
-  {"0 0 * * *", Plausible.Workers.LocationsSync}
+  {"0 0 * * *", Plausible.Workers.LocationsSync},
+  # Every hour: mark one-shot visitor farms as suspicious traffic
+  {"10 * * * *", Plausible.Workers.TrafficFarms},
+  # Every 6 hours: Cloudflare edge HTML requests by crawler (off without CLOUDFLARE_API_TOKEN)
+  {"25 */6 * * *", Plausible.Workers.SyncEdgeRequests}
 ]
 
 cloud_cron = [
@@ -739,7 +750,9 @@ base_queues = [
   domain_change_transition: 1,
   check_accept_traffic_until: 1,
   clickhouse_clean_sites: 1,
-  locations_sync: 1
+  locations_sync: 1,
+  traffic_farms: 1,
+  edge_requests: 1
 ]
 
 cloud_queues = [

@@ -1,0 +1,192 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["mcp>=1.2,<2"]
+# ///
+"""MCP server for Recount (self-hosted Plausible): stats queries, traffic quality, visit paths,
+session recordings and goal settings, over stdio. See docs/mcp.md.
+
+Env: PLAUSIBLE_URL, PLAUSIBLE_API_KEY. Read-only unless RECOUNT_MCP_WRITE=1.
+"""
+
+import json
+import os
+import urllib.error
+import urllib.parse
+import urllib.request
+from typing import Any, Literal
+
+from mcp.server.fastmcp import FastMCP
+
+BASE_URL = os.environ.get("PLAUSIBLE_URL", "").rstrip("/")
+API_KEY = os.environ.get("PLAUSIBLE_API_KEY", "")
+WRITE = os.environ.get("RECOUNT_MCP_WRITE") == "1"
+
+mcp = FastMCP("recount")
+
+
+class APIError(Exception):
+    pass
+
+
+def call(method: str, path: str, payload: Any = None, query: dict | None = None) -> Any:
+    if not BASE_URL or not API_KEY:
+        raise APIError("Set PLAUSIBLE_URL and PLAUSIBLE_API_KEY for the recount MCP server.")
+
+    url = BASE_URL + path
+    if query:
+        clean = {k: v for k, v in query.items() if v not in (None, "", [])}
+        url += "?" + urllib.parse.urlencode(clean)
+
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "RecountMCP/1.0",
+        "Authorization": "Bearer " + API_KEY,
+    }
+    body = None
+    if payload is not None:
+        body = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+
+    request = urllib.request.Request(url, data=body, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            raw = response.read()
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", "replace")
+        try:
+            detail = json.loads(detail).get("error", detail)
+        except (ValueError, AttributeError):
+            pass
+        raise APIError("HTTP {}: {}".format(error.code, detail)) from error
+    except urllib.error.URLError as error:
+        raise APIError("Connection failed: {}".format(error.reason)) from error
+
+    return json.loads(raw.decode("utf-8")) if raw else None
+
+
+@mcp.tool()
+def list_sites() -> Any:
+    """List the sites this API key can read (domains are the `site_id` for every other tool)."""
+    return call("GET", "/api/v1/admin/sites")
+
+
+@mcp.tool()
+def query_stats(
+    site_id: str,
+    metrics: list[str],
+    date_range: str | list[str] = "7d",
+    dimensions: list[str] | None = None,
+    filters: list[Any] | None = None,
+    order_by: list[Any] | None = None,
+    include: dict | None = None,
+    limit: int | None = None,
+) -> Any:
+    """Query aggregated stats with the Plausible Stats API v2 (POST /api/v2/query).
+
+    metrics: visitors, visits, pageviews, views_per_visit, bounce_rate, visit_duration, events,
+      scroll_depth, percentage, conversion_rate, group_conversion_rate, average_revenue,
+      total_revenue, time_on_page.
+    date_range: "day", "7d", "28d", "30d", "month", "6mo", "12mo", "year", "all", or
+      ["2026-11-01", "2026-11-11"]. Days are in the site's timezone.
+    dimensions: e.g. "event:page", "event:goal", "event:hostname", "event:props:<key>",
+      "visit:source", "visit:referrer", "visit:channel", "visit:utm_source", "visit:utm_campaign",
+      "visit:country_name", "visit:city_name", "visit:device", "visit:browser", "visit:os",
+      "visit:entry_page", "visit:exit_page", "time:day", "time:hour", "time:week", "time:month".
+    filters: e.g. [["is", "visit:source", ["Google"]], ["contains", "event:page", ["/blog"]]];
+      operators is, is_not, contains, contains_not, matches, matches_not; combine with
+      ["and", [...]], ["or", [...]], ["not", f].
+    order_by: e.g. [["visitors", "desc"]]. include: e.g. {"imports": true, "total_rows": true}.
+    Only human traffic is counted, like the dashboard's default view.
+    """
+    body: dict[str, Any] = {"site_id": site_id, "metrics": metrics, "date_range": date_range}
+    optional = {"dimensions": dimensions, "filters": filters, "order_by": order_by, "include": include}
+    body.update({k: v for k, v in optional.items() if v})
+    if limit:
+        body["pagination"] = {"limit": limit}
+    return call("POST", "/api/v2/query", body)
+
+
+@mcp.tool()
+def traffic_quality(site_id: str, days: int = 7) -> Any:
+    """How a site's visits were classified (human / suspicious / bot) per UTC day, why
+    (classifier reasons with their meaning and effect), crawler HTML requests counted at the
+    Cloudflare edge by agent and category (AI training, AI assistants, search, fake browsers…),
+    and yesterday's alerts (bot share, datacenter share, forged search referrers, visitor farms,
+    drops, spikes and surges against the 14 days before). days: 1-90.
+    """
+    return call("GET", "/api/v1/admin/traffic", query={"site_id": site_id, "days": days})
+
+
+@mcp.tool()
+def visit_paths(
+    site_id: str,
+    mode: Literal["top", "sessions", "next", "prev"] = "top",
+    step: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    contains: list[str] | None = None,
+    props: list[str] | None = None,
+    limit: int | None = None,
+) -> Any:
+    """Anonymized per-visit sequences of pages and events, for questions aggregate stats can't
+    answer (what visitors did before or after a step).
+
+    mode: top (most common paths), sessions (individual visits), next / prev (what follows or
+    precedes `step`, an event name or page path; required for these modes).
+    date_from / date_to: site-timezone dates (YYYY-MM-DD), at most 90 days, default last 30.
+    contains: only visits with any of these events. props: short enum-like event props to append
+    to steps. limit: 1-500, default 50.
+    """
+    query = {
+        "site_id": site_id,
+        "mode": mode,
+        "step": step,
+        "from": date_from,
+        "to": date_to,
+        "contains": ",".join(contains or []),
+        "props": ",".join(props or []),
+        "limit": limit,
+    }
+    return call("GET", "/api/v1/admin/paths", query=query)
+
+
+@mcp.tool()
+def list_replays(site_id: str, days: int | None = None, limit: int | None = None,
+                 visitor: str | None = None) -> Any:
+    """Recorded sessions (rrweb session recordings, kept 30 days), newest first, with page loads,
+    event counts and sizes. Use bin/replays in the analytics repo to play or summarize one."""
+    query = {"site_id": site_id, "days": days, "limit": limit, "visitor": visitor}
+    return call("GET", "/api/v1/admin/replays", query=query)
+
+
+@mcp.tool()
+def list_goals(site_id: str) -> Any:
+    """The custom event goals configured for a site."""
+    return call("GET", "/api/v1/admin/events", query={"site_id": site_id})
+
+
+@mcp.tool()
+def list_properties(site_id: str, discover: bool = False) -> Any:
+    """Custom properties allowed for a site. discover=true also lists property keys recorded in
+    the last six months that aren't configured yet."""
+    query = {"site_id": site_id, "discover": "true" if discover else None}
+    return call("GET", "/api/v1/admin/properties", query=query)
+
+
+if WRITE:
+
+    @mcp.tool()
+    def add_goals(site_id: str, events: list[str]) -> Any:
+        """Register custom event names as goals (additive; existing goals are kept)."""
+        return call("POST", "/api/v1/admin/events", {"site_id": site_id, "events": events})
+
+    @mcp.tool()
+    def add_properties(site_id: str, properties: list[str]) -> Any:
+        """Allow custom property keys for a site (additive)."""
+        return call("POST", "/api/v1/admin/properties",
+                    {"site_id": site_id, "properties": properties})
+
+
+if __name__ == "__main__":
+    mcp.run()

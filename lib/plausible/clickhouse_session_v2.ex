@@ -76,6 +76,8 @@ defmodule Plausible.ClickhouseSessionV2 do
     field :traffic, Ch, type: "UInt8", default: 0
     field :traffic_reasons, Ch, type: "Array(LowCardinality(String))", default: []
     field :interacted, Ch, type: "UInt8", default: 0
+    # Salted hash of the visitor's /24 (IPv6 /48) network, see Plausible.Ingestion.Network
+    field :network, Ch, type: "UInt64", default: 0
 
     field :transferred_from, :string
   end

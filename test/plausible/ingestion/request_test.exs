@@ -466,7 +466,10 @@ defmodule Plausible.Ingestion.RequestTest do
              "user_agent" => "Mozilla",
              "ip_classification" => nil,
              "automation" => 0,
-             "interacted" => false
+             "interacted" => false,
+             "browser_headers" => false,
+             "client_hints" => false,
+             "proxied" => false
            }
 
     assert %NaiveDateTime{} = NaiveDateTime.from_iso8601!(request["timestamp"])

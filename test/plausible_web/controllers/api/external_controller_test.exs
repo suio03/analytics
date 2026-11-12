@@ -209,6 +209,7 @@ defmodule PlausibleWeb.Api.ExternalControllerTest do
         "user-agent",
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/85.0.4183.83 Safari/537.36"
       )
+      |> put_req_header("sec-fetch-mode", "cors")
       |> post("/api/event", params)
 
       assert %{traffic: 2} = get_event(site)
@@ -249,10 +250,57 @@ defmodule PlausibleWeb.Api.ExternalControllerTest do
       conn
       |> put_req_header("user-agent", current_chrome)
       |> put_req_header("x-forwarded-for", "3.0.0.1")
+      |> put_browser_headers()
       |> post("/api/event", %{name: "pageview", url: "http://example.com/", domain: site.domain})
 
       assert %{traffic: 0} = get_event(site)
-      assert %{traffic: 0, traffic_reasons: ["datacenter_ip"]} = get_created_session(site)
+
+      assert %{traffic: 0, traffic_reasons: ["datacenter_ip"], network: network} =
+               get_created_session(site)
+
+      assert network ==
+               Plausible.Ingestion.Network.hash(
+                 "3.0.0.1",
+                 Plausible.Session.Salts.fetch().current
+               )
+    end
+
+    test "a forged Google referrer is recorded as suspicious traffic", %{conn: conn, site: site} do
+      conn
+      |> put_req_header("user-agent", current_chrome())
+      |> put_browser_headers()
+      |> post("/api/event", %{
+        name: "pageview",
+        url: "http://example.com/",
+        referrer: "https://www.google.com/search?q=example",
+        domain: site.domain
+      })
+
+      assert %{traffic: 1} = get_event(site)
+
+      assert %{traffic: 1, traffic_reasons: ["forged_search_referrer"]} =
+               get_created_session(site)
+    end
+
+    test "missing browser headers are recorded without changing the class", %{
+      conn: conn,
+      site: site
+    } do
+      conn
+      |> put_req_header("user-agent", current_chrome())
+      |> post("/api/event", %{name: "pageview", url: "http://example.com/", domain: site.domain})
+
+      assert %{traffic: 0, traffic_reasons: ["no_sec_fetch", "no_client_hints"]} =
+               get_created_session(site)
+    end
+
+    test "browser headers are not judged for proxied events", %{conn: conn, site: site} do
+      conn
+      |> put_req_header("user-agent", current_chrome())
+      |> put_req_header("x-plausible-ip", "81.2.69.142")
+      |> post("/api/event", %{name: "pageview", url: "http://example.com/", domain: site.domain})
+
+      assert %{traffic: 0, traffic_reasons: []} = get_created_session(site)
     end
 
     test "server side custom events without a user agent stay human", %{conn: conn, site: site} do
@@ -2255,5 +2303,18 @@ defmodule PlausibleWeb.Api.ExternalControllerTest do
         order_by: [desc: e.timestamp]
       )
     )
+  end
+
+  defp current_chrome() do
+    major = Plausible.Ingestion.Traffic.current_chrome_major(Date.utc_today())
+
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/#{major}.0.0.0 Safari/537.36"
+  end
+
+  defp put_browser_headers(conn) do
+    conn
+    |> put_req_header("sec-fetch-mode", "cors")
+    |> put_req_header("sec-fetch-site", "cross-site")
+    |> put_req_header("sec-ch-ua", ~s("Chromium";v="156", "Google Chrome";v="156"))
   end
 end

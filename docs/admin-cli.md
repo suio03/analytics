@@ -93,6 +93,13 @@ Limits: 30 steps per visit and 500,000 scanned events (`truncated: true` when
 reached). Visits cannot be linked across days because visitor hashes rotate
 daily.
 
+## Traffic quality (read-only)
+
+`GET /api/v1/admin/traffic?site_id=<domain>&days=7` returns sessions and pageviews per traffic
+class by UTC day, the classifier reasons, crawler requests at the Cloudflare edge and yesterday's
+alerts (`days` 1–90, default 7). See [traffic-quality.md](traffic-quality.md). For AI agents,
+[mcp.md](mcp.md) exposes this and the other admin routes as MCP tools.
+
 ## Session recordings (read-only)
 
 Sites can post rrweb recordings to `POST /api/replay?s=<site>&vid=<visitor>&sid=<session>&load=<page load>&seq=<n>`

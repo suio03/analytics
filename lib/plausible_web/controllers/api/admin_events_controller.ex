@@ -81,6 +81,27 @@ defmodule PlausibleWeb.Api.AdminEventsController do
     end
   end
 
+  @doc "Traffic quality, edge crawlers and alerts for the last `days` UTC days (docs/traffic-quality.md)."
+  def traffic(conn, params) do
+    with {:ok, site} <- get_site(conn, params),
+         {:ok, days} <- traffic_days(params["days"]) do
+      json(conn, Plausible.TrafficQuality.api_report(site, days))
+    else
+      error -> respond_error(conn, error)
+    end
+  end
+
+  defp traffic_days(nil), do: {:ok, 7}
+
+  defp traffic_days(days) when is_binary(days) do
+    case Integer.parse(days) do
+      {n, ""} when n in 1..90 -> {:ok, n}
+      _ -> {:error, :invalid_traffic_days}
+    end
+  end
+
+  defp traffic_days(_), do: {:error, :invalid_traffic_days}
+
   def replays(conn, params) do
     with {:ok, site} <- get_site(conn, params),
          {:ok, result} <- Plausible.Replays.list(site, params) do
@@ -242,6 +263,9 @@ defmodule PlausibleWeb.Api.AdminEventsController do
         conn,
         "Parameter `props` cannot include identifier, URL, name or free-text properties"
       )
+
+  defp respond_error(conn, {:error, :invalid_traffic_days}),
+    do: H.bad_request(conn, "Parameter `days` must be an integer between 1 and 90")
 
   defp respond_error(conn, {:error, :invalid_days}),
     do: H.bad_request(conn, "Parameter `days` must be an integer between 1 and 30")

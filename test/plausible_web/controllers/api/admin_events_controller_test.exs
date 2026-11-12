@@ -392,4 +392,51 @@ defmodule PlausibleWeb.Api.AdminEventsControllerTest do
       assert %{"error" => _} = json_response(conn, 404)
     end
   end
+
+  describe "traffic" do
+    test "returns classes, reasons with their effect, edge requests and alerts", %{
+      conn: conn,
+      user: user
+    } do
+      site = insert(:site, domain: "traffic.example", members: [user])
+      now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+
+      populate_stats(site, [
+        build(:pageview, user_id: 1, timestamp: now),
+        build(:pageview, user_id: 2, timestamp: now, traffic: 1)
+        |> Map.put(:traffic_reasons, ["forged_search_referrer"])
+      ])
+
+      response =
+        conn
+        |> get("/api/v1/admin/traffic", %{site_id: "traffic.example", days: "7"})
+        |> json_response(200)
+
+      assert response["days"] == 7
+      assert response["timezone"] == "UTC"
+      assert response["classes"]["human"]["sessions"] == 1
+      assert response["classes"]["suspicious"]["sessions"] == 1
+      assert length(response["daily"]) == 7
+
+      assert List.last(response["daily"])["sessions"] == %{
+               "human" => 1,
+               "suspicious" => 1,
+               "bot" => 0
+             }
+
+      assert [%{"reason" => "forged_search_referrer", "effect" => "strong", "sessions" => 1}] =
+               response["reasons"]
+
+      assert %{"enabled" => false, "total" => 0} = response["edge"]
+      assert is_list(response["alerts"])
+    end
+
+    test "validates days", %{conn: conn, user: user} do
+      insert(:site, domain: "traffic.example", members: [user])
+      conn = get(conn, "/api/v1/admin/traffic", %{site_id: "traffic.example", days: "365"})
+
+      assert %{"error" => "Parameter `days` must be an integer between 1 and 90"} =
+               json_response(conn, 400)
+    end
+  end
 end

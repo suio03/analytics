@@ -125,6 +125,7 @@ defmodule Plausible.Ingestion.Event do
       put_revenue: &put_revenue/2,
       put_salts: &put_salts/2,
       put_user_id: &put_user_id/2,
+      put_network: &put_network/2,
       validate_clickhouse_event: &validate_clickhouse_event/2,
       register_session: &register_session/2,
       write_to_buffer: &write_to_buffer/2
@@ -330,6 +331,12 @@ defmodule Plausible.Ingestion.Event do
 
   defp put_salts(%__MODULE__{} = event, _context) do
     %{event | salts: Plausible.Session.Salts.fetch()}
+  end
+
+  defp put_network(%__MODULE__{} = event, _context) do
+    update_session_attrs(event, %{
+      network: Plausible.Ingestion.Network.hash(event.request.remote_ip, event.salts.current)
+    })
   end
 
   defp put_user_id(%__MODULE__{} = event, _context) do
