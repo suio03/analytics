@@ -177,11 +177,17 @@ defmodule Plausible.EdgeRequests do
     # One row per (date, agent), the key of the table's unique index. Several
     # user agent strings can map to the same agent with different categories;
     # the category with the most requests wins.
+    agents =
+      Enum.map(agents, fn %{"count" => count, "dimensions" => d} ->
+        {Date.from_iso8601!(d["date"]), d["userAgent"], count}
+      end)
+
+    classified = classify(agents)
+
     named =
       agents
-      |> Enum.reduce(%{}, fn %{"count" => count, "dimensions" => d}, acc ->
-        date = Date.from_iso8601!(d["date"])
-        {agent, category} = Agents.classify(d["userAgent"], date)
+      |> Enum.reduce(%{}, fn {date, ua, count}, acc ->
+        {agent, category} = Map.fetch!(classified, {ua, date})
         Map.update(acc, {date, agent, category}, count, &(&1 + count))
       end)
       |> Enum.group_by(fn {{date, agent, _}, _} -> {date, agent} end)
@@ -208,6 +214,19 @@ defmodule Plausible.EdgeRequests do
     |> Enum.map(fn {{date, agent, category}, requests} ->
       %{site_id: site_id, date: date, agent: agent, category: category, requests: requests}
     end)
+  end
+
+  # Up to 10,000 user agents per site; classify them on all cores.
+  defp classify(agents) do
+    agents
+    |> Enum.map(fn {date, ua, _} -> {ua, date} end)
+    |> Enum.uniq()
+    |> Task.async_stream(fn {ua, date} -> {{ua, date}, Agents.classify(ua, date)} end,
+      max_concurrency: System.schedulers_online(),
+      ordered: false,
+      timeout: :infinity
+    )
+    |> Map.new(fn {:ok, pair} -> pair end)
   end
 
   @doc "Stored rows for the site's last `days` UTC days ending `today`."
