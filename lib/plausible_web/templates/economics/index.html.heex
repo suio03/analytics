@@ -51,7 +51,90 @@
     <% totals = Plausible.Economics.totals(@report["daily"]) %>
     <% cohort_days = @report["cohortDays"] %>
     <% window = "#{@report["days"]} days" %>
+    <% fq = @report["freeQuotas"] %>
     <div data-economics-sections>
+      <section :if={fq} data-economics-section="quotas" class="mb-10">
+        <.section_title title="Free quota today" />
+        <p class="mb-3 text-sm text-gray-500 dark:text-gray-400">
+          UTC <%= fq["today"] %> · resets at 00:00 UTC, in <%= time_left(fq["resetsAt"]) %>. Once a quota is full, free users wait for the reset.
+        </p>
+        <div class="grid grid-cols-2 lg:grid-cols-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 divide-x divide-gray-100 dark:divide-gray-700">
+          <div :for={q <- fq["quotas"]} class="p-5">
+            <% {bar, text} = quota_color(q["used"], q["limit"]) %>
+            <p class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+              <span><%= q["label"] %></span>
+              <span
+                :if={q["used"] >= q["limit"]}
+                class="px-1.5 rounded bg-red-50 text-red-700 dark:bg-red-900/40 dark:text-red-300 font-medium"
+              >
+                Full
+              </span>
+            </p>
+            <p class="mt-2 tabular-nums">
+              <span class={["text-2xl font-semibold", text]}>
+                <%= quota_value(q["used"], q["unit"]) %>
+              </span>
+              <span class="text-sm text-gray-500">
+                / <%= quota_value(q["limit"], q["unit"]) %>
+              </span>
+            </p>
+            <div class="mt-3 h-1.5 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
+              <div
+                class={["h-full rounded-full", bar]}
+                style={"width: #{Float.round(quota_share(q["used"], q["limit"]) * 100, 1)}%"}
+              >
+              </div>
+            </div>
+            <p class="mt-2 text-xs text-gray-500 tabular-nums">
+              <%= if q["used"] >= q["limit"] do %>
+                Full at <%= utc_time(q["fullAt"]) %> UTC · waits for 00:00 UTC
+              <% else %>
+                <%= quota_value(max(q["limit"] - q["used"], 0), q["unit"]) %> left · <%= pct(
+                  quota_share(q["used"], q["limit"])
+                ) %> used
+              <% end %>
+            </p>
+          </div>
+        </div>
+        <div class="mt-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-x-auto">
+          <table class="w-full text-sm text-left tabular-nums">
+            <thead class="bg-gray-50 dark:bg-gray-850 text-xs text-gray-500 dark:text-gray-400">
+              <tr>
+                <th class="px-5 py-3">Day (UTC)</th>
+                <th :for={q <- fq["quotas"]} class="px-4 py-3 text-right">
+                  <%= q["label"] %>
+                  <span class="font-normal">/ <%= quota_value(q["limit"], q["unit"]) %></span>
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+              <tr :for={d <- fq["days"]}>
+                <td class="px-5 py-3 font-medium whitespace-nowrap">
+                  <%= d["day"] %>
+                  <span
+                    :if={d["day"] == fq["today"]}
+                    class="ml-1 text-xs font-normal text-gray-500"
+                  >
+                    so far
+                  </span>
+                </td>
+                <td
+                  :for={{q, c} <- Enum.zip(fq["quotas"], d["cells"])}
+                  class="px-4 py-3 text-right whitespace-nowrap"
+                >
+                  <span class={elem(quota_color(c["used"], q["limit"]), 1)}>
+                    <%= quota_value(c["used"], q["unit"]) %>
+                  </span>
+                  <span :if={c["fullAt"]} class="ml-1 text-xs text-red-600 dark:text-red-400">
+                    full <%= utc_time(c["fullAt"]) %>
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section data-economics-section="summary" class="mb-10">
         <.section_title title="Summary" />
         <div class="grid grid-cols-2 lg:grid-cols-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 divide-x divide-gray-100 dark:divide-gray-700">

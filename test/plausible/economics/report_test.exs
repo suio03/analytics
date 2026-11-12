@@ -206,6 +206,49 @@ defmodule Plausible.Economics.ReportTest do
     assert %{count: 2, new: 1, repeat: 0.5, per_payer: 34.5, credits_left: 335} = summary
   end
 
+  test "free quotas: today's use and the UTC days since the app has use, newest first" do
+    fq = %{
+      "quotas" => [
+        %{"key" => "video", "label" => "MV previews", "unit" => "usd", "limit" => 25},
+        %{"key" => "analysis", "label" => "Analyses", "unit" => "count", "limit" => 150},
+        %{"key" => "broken", "limit" => 0}
+      ],
+      "days" => [
+        %{"day" => "2026-11-09", "key" => "video", "used" => 25.1, "fullAt" => 1_762_700_000},
+        %{"day" => "2026-11-10", "key" => "analysis", "used" => 12},
+        %{"day" => "bad", "key" => "video", "used" => 1}
+      ]
+    }
+
+    assert %{
+             "today" => "2026-11-10",
+             "resetsAt" => reset,
+             "quotas" => [
+               %{"key" => "video", "used" => 0, "fullAt" => nil, "limit" => 25},
+               %{"key" => "analysis", "unit" => "count", "used" => 12}
+             ],
+             "days" => [
+               %{"day" => "2026-11-10"},
+               %{
+                 "day" => "2026-11-09",
+                 "cells" => [
+                   %{"used" => 25.1, "fullAt" => 1_762_700_000},
+                   %{"used" => 0, "fullAt" => nil}
+                 ]
+               }
+             ]
+           } = Report.build(Map.put(@raw, "freeQuotas", fq), @tz, 7, @now)["freeQuotas"]
+
+    assert reset == at(~U[2026-11-11 00:00:00Z])
+
+    # Never more than 7 days back.
+    old = %{fq | "days" => [%{"day" => "2026-10-01", "key" => "video", "used" => 3}]}
+    assert length(Report.free_quotas(old, @now)["days"]) == 7
+
+    assert Report.build(@raw, @tz, 7, @now)["freeQuotas"] == nil
+    assert Report.free_quotas(%{"quotas" => [], "days" => []}, @now) == nil
+  end
+
   test "raw? tells the export from a format 1 report" do
     assert Report.raw?(@raw)
     refute Report.raw?(%{"daily" => [], "weeks" => [], "sources" => []})

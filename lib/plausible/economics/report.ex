@@ -74,9 +74,70 @@ defmodule Plausible.Economics.Report do
       "daily" => daily(start, today, users, costs, orders),
       "weeks" => weeks(users, costs, orders, tz, now),
       "sources" => sources(users, costs, orders),
-      "payers" => payers(raw["payers"], since)
+      "payers" => payers(raw["payers"], since),
+      "freeQuotas" => free_quotas(raw["freeQuotas"], now)
     }
   end
+
+  @quota_days 7
+
+  @doc """
+  The app's free daily quotas (UTC days): today's use of each quota and the last #{@quota_days}
+  days, newest first, starting at the first day the app has use for. Nil when the app doesn't
+  export them.
+  """
+  def free_quotas(%{"quotas" => quotas, "days" => days}, now)
+      when is_list(quotas) and is_list(days) do
+    today = now |> DateTime.from_unix!() |> DateTime.to_date()
+
+    quotas =
+      for q <- quotas,
+          is_map(q) and is_binary(q["key"]) and is_number(q["limit"]) and q["limit"] > 0 do
+        %{
+          "key" => q["key"],
+          "label" => if(is_binary(q["label"]), do: q["label"], else: q["key"]),
+          "unit" => if(q["unit"] == "usd", do: "usd", else: "count"),
+          "limit" => q["limit"]
+        }
+      end
+
+    use =
+      for d <- days, is_map(d), date = quota_date(d["day"]), date != nil, into: %{} do
+        {{date, d["key"]},
+         %{"used" => num(d["used"]), "fullAt" => if(is_number(d["fullAt"]), do: d["fullAt"])}}
+      end
+
+    earliest = use |> Map.keys() |> Enum.map(&elem(&1, 0)) |> Enum.min(Date, fn -> today end)
+    first = Enum.min([Enum.max([earliest, Date.add(today, 1 - @quota_days)], Date), today], Date)
+
+    cell = fn date, key -> Map.get(use, {date, key}, %{"used" => 0, "fullAt" => nil}) end
+
+    if quotas != [] do
+      %{
+        "today" => Date.to_iso8601(today),
+        "resetsAt" => DateTime.to_unix(DateTime.new!(Date.add(today, 1), ~T[00:00:00])),
+        "quotas" => Enum.map(quotas, &Map.merge(&1, cell.(today, &1["key"]))),
+        "days" =>
+          for date <- Date.range(today, first, -1) do
+            %{
+              "day" => Date.to_iso8601(date),
+              "cells" => Enum.map(quotas, &cell.(date, &1["key"]))
+            }
+          end
+      }
+    end
+  end
+
+  def free_quotas(_, _), do: nil
+
+  defp quota_date(day) when is_binary(day) do
+    case Date.from_iso8601(day) do
+      {:ok, date} -> date
+      _ -> nil
+    end
+  end
+
+  defp quota_date(_), do: nil
 
   @doc """
   Accounts that paid within the window (any paid order since `since`), with the app's lifetime

@@ -240,6 +240,37 @@ defmodule PlausibleWeb.EconomicsView do
     """
   end
 
+  @doc "A free quota amount in its unit (dollars of model cost or a count)."
+  def quota_value(n, "usd"), do: usd(n)
+  def quota_value(n, _), do: Integer.to_string(round(n))
+
+  @doc "Share of a quota used, 0..1."
+  def quota_share(used, limit) when is_number(limit) and limit > 0, do: min(used / limit, 1.0)
+  def quota_share(_, _), do: 0.0
+
+  @doc "Bar and text color of a quota: red when full, amber from 80%."
+  def quota_color(used, limit) do
+    share = if limit > 0, do: used / limit, else: 0
+
+    cond do
+      share >= 1 -> {"bg-red-500", "text-red-600 dark:text-red-400 font-semibold"}
+      share >= 0.8 -> {"bg-amber-500", "text-amber-600 dark:text-amber-400 font-semibold"}
+      true -> {"bg-indigo-500", ""}
+    end
+  end
+
+  @doc "HH:MM in UTC of a unix second."
+  def utc_time(unix) when is_number(unix),
+    do: unix |> round() |> DateTime.from_unix!() |> Calendar.strftime("%H:%M")
+
+  def utc_time(_), do: "—"
+
+  @doc "Time left until a unix second, as \"5h 12m\"."
+  def time_left(at, now \\ System.os_time(:second)) do
+    mins = max(div(at - now, 60), 0)
+    if mins >= 60, do: "#{div(mins, 60)}h #{rem(mins, 60)}m", else: "#{mins}m"
+  end
+
   @doc "Red below 1×, amber below 3×; a young cohort (still filling) is not colored."
   def payback_class(nil, _), do: "text-gray-400"
   def payback_class(_, false), do: "text-gray-500"

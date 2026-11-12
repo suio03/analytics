@@ -148,6 +148,8 @@ defmodule PlausibleWeb.EconomicsControllerTest do
 
     {:ok, _} = Economics.save_source(site.id, %{"url" => "https://app.example/x", "token" => "t"})
     now = System.os_time(:second)
+    today = Date.utc_today() |> Date.to_iso8601()
+    midnight = div(now, 86_400) * 86_400
 
     Req.Test.stub(__MODULE__, fn conn ->
       params = Plug.Conn.Query.decode(conn.query_string)
@@ -181,11 +183,24 @@ defmodule PlausibleWeb.EconomicsControllerTest do
             "costUsd" => 40.5,
             "lastActiveAt" => now - 60
           }
-        ]
+        ],
+        "freeQuotas" => %{
+          "quotas" => [
+            %{"key" => "video", "label" => "MV previews", "unit" => "usd", "limit" => 25},
+            %{"key" => "analysis", "label" => "Analyses", "unit" => "count", "limit" => 150}
+          ],
+          "days" => [
+            %{"day" => today, "key" => "video", "used" => 25.3, "fullAt" => midnight + 3600 * 3},
+            %{"day" => today, "key" => "analysis", "used" => 30, "fullAt" => nil}
+          ]
+        }
       })
     end)
 
     html = get(conn, "/economics.example/economics?days=7") |> html_response(200)
+    assert html =~ ~s(data-economics-section="quotas")
+    assert html =~ "Full at 03:00 UTC"
+    assert html =~ "120 left · 20% used"
     assert html =~ ~s(data-economics-section="payers")
     assert html =~ "buyer@example.com"
     assert html =~ "Germany"
