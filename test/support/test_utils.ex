@@ -241,8 +241,11 @@ defmodule Plausible.TestUtils do
     )
   end
 
+  # Never a cloud address, so tests that assert exact traffic reasons don't
+  # randomly pick up "datacenter_ip".
   def random_ip() do
-    Enum.map_join(1..4, ".", fn _ -> Enum.random(1..254) end)
+    ip = Enum.map_join(1..4, ".", fn _ -> Enum.random(1..254) end)
+    if Plausible.Ingestion.DatacenterIP.datacenter?(ip), do: random_ip(), else: ip
   end
 
   def minio_running? do
