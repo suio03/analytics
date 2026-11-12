@@ -174,11 +174,21 @@ defmodule Plausible.EdgeRequests do
   # Named agents from the top user agents; the long tail Cloudflare didn't list
   # (beyond the top #{@top_agents}) is counted as browsers.
   defp rows(%{"totals" => totals, "agents" => agents}, site_id) do
+    # One row per (date, agent), the key of the table's unique index. Several
+    # user agent strings can map to the same agent with different categories;
+    # the category with the most requests wins.
     named =
-      Enum.reduce(agents, %{}, fn %{"count" => count, "dimensions" => d}, acc ->
+      agents
+      |> Enum.reduce(%{}, fn %{"count" => count, "dimensions" => d}, acc ->
         date = Date.from_iso8601!(d["date"])
         {agent, category} = Agents.classify(d["userAgent"], date)
         Map.update(acc, {date, agent, category}, count, &(&1 + count))
+      end)
+      |> Enum.group_by(fn {{date, agent, _}, _} -> {date, agent} end)
+      |> Map.new(fn {{date, agent}, entries} ->
+        {{_, _, category}, _} = Enum.max_by(entries, fn {_, count} -> count end)
+        requests = entries |> Enum.map(fn {_, count} -> count end) |> Enum.sum()
+        {{date, agent, category}, requests}
       end)
 
     seen =

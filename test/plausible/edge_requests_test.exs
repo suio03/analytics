@@ -110,6 +110,42 @@ defmodule Plausible.EdgeRequestsTest do
     assert EdgeRequests.report(site.id, 7, ~D[2026-11-12]).total == 130
   end
 
+  test "stores one row per day and agent when user agents of one agent fall in different categories" do
+    Req.Test.stub(__MODULE__, fn conn ->
+      Req.Test.json(conn, %{
+        "data" => %{
+          "viewer" => %{
+            "zones" => [
+              %{
+                "totals" => [group(25, %{"date" => "2026-11-12"})],
+                "agents" => [
+                  group(20, %{
+                    "date" => "2026-11-12",
+                    "userAgent" =>
+                      "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+                  }),
+                  # UAInspector also names this one "Googlebot", as other_bot.
+                  group(3, %{
+                    "date" => "2026-11-12",
+                    "userAgent" => "Google-Site-Verification/1.0"
+                  })
+                ]
+              }
+            ]
+          }
+        },
+        "errors" => nil
+      })
+    end)
+
+    site = insert(:site, domain: "example.com")
+    assert {:ok, 2} = EdgeRequests.sync_site(site, "zone-example", ~D[2026-11-12], 1)
+
+    report = EdgeRequests.report(site.id, 1, ~D[2026-11-12])
+    assert report.agents == [%{agent: "Googlebot", category: "search", requests: 23}]
+    assert report.categories == %{"search" => 23, "browser" => 2}
+  end
+
   test "reports Cloudflare errors" do
     Req.Test.stub(__MODULE__, fn conn ->
       case conn.request_path do
