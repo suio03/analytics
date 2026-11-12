@@ -195,9 +195,6 @@ defmodule Plausible.EdgeRequests.Agents do
 
           %UAInspector.Result{} = result ->
             browser(ua, result, date)
-
-          _ ->
-            {"Unknown", "other_bot"}
         end
     end
   end
