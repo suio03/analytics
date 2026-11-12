@@ -185,9 +185,7 @@ defmodule Plausible.EdgeRequests.Agents do
         {http_client_name(ua), "other_bot"}
 
       true ->
-        # Shares ingestion's cache: parsing takes ~10 ms and the same user
-        # agents come back day after day and across sites.
-        case Plausible.Cache.Adapter.get(:user_agents, ua, fn -> UAInspector.parse(ua) end) do
+        case parse(ua) do
           %UAInspector.Result.Bot{name: name}
           when is_binary(name) and name not in ["", "Generic Bot"] ->
             {name, "other_bot"}
@@ -199,6 +197,12 @@ defmodule Plausible.EdgeRequests.Agents do
             browser(ua, result, date)
         end
     end
+  end
+
+  # Shares ingestion's cache: parsing takes ~10 ms and the same user agents
+  # come back day after day and across sites.
+  defp parse(ua) do
+    Plausible.Cache.Adapter.get(:user_agents, ua, fn -> UAInspector.parse(ua) end)
   end
 
   defp browser(ua, result, date) do
