@@ -329,8 +329,8 @@ defmodule Plausible.Ingestion.Event do
     end
   end
 
-  defp put_salts(%__MODULE__{} = event, _context) do
-    %{event | salts: Plausible.Session.Salts.fetch()}
+  defp put_salts(%__MODULE__{} = event, context) do
+    %{event | salts: Keyword.get_lazy(context, :salts, &Plausible.Session.Salts.fetch/0)}
   end
 
   defp put_network(%__MODULE__{} = event, _context) do
@@ -548,11 +548,29 @@ defmodule Plausible.Ingestion.Event do
       is_nil(domain) ->
         nil
 
+      is_binary(request.visitor_id) ->
+        # Cookie mode: stable across days, so it is keyed with a fixed secret, not the daily salt.
+        root_domain = get_root_domain(hostname)
+        SipHash.hash!(visitor_id_key(), "v:" <> request.visitor_id <> domain <> root_domain)
+
       true ->
         user_agent = request.user_agent || ""
         root_domain = get_root_domain(hostname)
 
         SipHash.hash!(salt, user_agent <> request.remote_ip <> domain <> root_domain)
+    end
+  end
+
+  defp visitor_id_key() do
+    case :persistent_term.get({__MODULE__, :visitor_id_key}, nil) do
+      nil ->
+        secret = Application.fetch_env!(:plausible, PlausibleWeb.Endpoint)[:secret_key_base]
+        key = binary_part(:crypto.hash(:sha256, "visitor-id:" <> secret), 0, 16)
+        :persistent_term.put({__MODULE__, :visitor_id_key}, key)
+        key
+
+      key ->
+        key
     end
   end
 

@@ -467,11 +467,27 @@ defmodule Plausible.Ingestion.RequestTest do
              "ip_classification" => nil,
              "automation" => 0,
              "interacted" => false,
+             "visitor_id" => nil,
              "browser_headers" => false,
              "client_hints" => false,
              "proxied" => false
            }
 
     assert %NaiveDateTime{} = NaiveDateTime.from_iso8601!(request["timestamp"])
+  end
+
+  test "parses a visitor id sent as v and ignores malformed ones" do
+    build = fn v ->
+      payload = %{n: "pageview", u: "https://dummy.site/", d: "dummy.site", v: v}
+      {:ok, request} = build_conn(:post, "/api/events", payload) |> Request.build()
+
+      request.visitor_id
+    end
+
+    assert build.("Ab3_def-GH12ijKL") == "Ab3_def-GH12ijKL"
+    assert build.("short") == nil
+    assert build.("has spaces in it") == nil
+    assert build.(String.duplicate("a", 65)) == nil
+    assert build.(123_456_789) == nil
   end
 end

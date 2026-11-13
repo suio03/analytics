@@ -397,4 +397,48 @@ defmodule Plausible.Ingestion.EventTest do
     assert {:ok, %{buffered: [event]}} = Event.build_and_buffer(request)
     assert event.clickhouse_event.hostname == "foo.netlify.app"
   end
+
+  defp user_id_for(site, headers, extra, context \\ []) do
+    payload = Map.merge(%{name: "pageview", url: "http://#{site.domain}/"}, extra)
+
+    conn =
+      Enum.reduce(headers, build_conn(:post, "/api/events", payload), fn {k, v}, conn ->
+        Plug.Conn.put_req_header(conn, k, v)
+      end)
+
+    {:ok, request} = Request.build(conn)
+    {:ok, %{buffered: [event], dropped: []}} = Event.build_and_buffer(request, context)
+    event.clickhouse_event.user_id
+  end
+
+  describe "cookie mode visitor id" do
+    @chrome ~s|Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36|
+    @safari ~s|Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1|
+
+    test "the same v is one visitor whatever the IP and user agent" do
+      site = insert(:site)
+
+      desk = [{"user-agent", @chrome}, {"x-forwarded-for", "1.1.1.1"}]
+      phone = [{"user-agent", @safari}, {"x-forwarded-for", "2.2.2.2"}]
+
+      a = user_id_for(site, desk, %{v: "visitorAAAA1111"})
+      b = user_id_for(site, phone, %{v: "visitorAAAA1111"})
+      c = user_id_for(site, desk, %{v: "visitorBBBB2222"})
+
+      assert a == b
+      assert a != c
+    end
+
+    test "the visitor id from v does not change when the daily salt rotates" do
+      site = insert(:site)
+      headers = [{"user-agent", @chrome}, {"x-forwarded-for", "1.1.1.1"}]
+      day1 = [salts: %{current: :crypto.strong_rand_bytes(16), previous: nil}]
+      day2 = [salts: %{current: :crypto.strong_rand_bytes(16), previous: nil}]
+
+      assert user_id_for(site, headers, %{v: "visitorAAAA1111"}, day1) ==
+               user_id_for(site, headers, %{v: "visitorAAAA1111"}, day2)
+
+      assert user_id_for(site, headers, %{}, day1) != user_id_for(site, headers, %{}, day2)
+    end
+  end
 end

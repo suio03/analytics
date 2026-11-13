@@ -52,6 +52,11 @@ defmodule Plausible.Ingestion.Request do
     field :automation, :integer, default: 0
     field :interacted, :boolean, default: false
 
+    # Random id the tracker keeps in a first-party cookie (and localStorage) on the site, sent
+    # as `v`. When present the visitor id is derived from it instead of the IP and user agent,
+    # so one person stays one visitor across days and network changes.
+    field :visitor_id, :string
+
     # Request headers used for traffic classification. `browser_headers`
     # tells whether the request carried any Sec-Fetch-* header (every current
     # browser sends them with fetch/XHR), `client_hints` whether it carried
@@ -148,7 +153,16 @@ defmodule Plausible.Ingestion.Request do
     )
     |> Changeset.put_change(:automation, parse_automation(request_body["a"]))
     |> Changeset.put_change(:interacted, request_body["i"] in [1, true, "1", "true"])
+    |> Changeset.put_change(:visitor_id, parse_visitor_id(request_body["v"]))
   end
+
+  @visitor_id_regex ~r/^[A-Za-z0-9_-]{8,64}$/
+
+  defp parse_visitor_id(value) when is_binary(value) do
+    if Regex.match?(@visitor_id_regex, value), do: value
+  end
+
+  defp parse_visitor_id(_), do: nil
 
   defp parse_automation(value) when is_integer(value) and value >= 0 and value < 65_536,
     do: value

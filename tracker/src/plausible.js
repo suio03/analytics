@@ -39,6 +39,51 @@
     return bits
   }
 
+  // Cookie mode: a random visitor id kept in a first-party cookie on the site's root domain
+  // (shared by its subdomains) and mirrored in localStorage, sent as `v`. The server derives
+  // the visitor from it instead of IP + user agent, so returning visitors are recognised across
+  // days. `data-cookieless` on the script tag turns it off and stores nothing.
+  var visitorId = scriptEl.hasAttribute('data-cookieless') ? null : loadVisitorId()
+
+  function loadVisitorId() {
+    var name = 'rc_vid'
+    var id = null
+    try {
+      var match = document.cookie.match(/(?:^|; )rc_vid=([A-Za-z0-9_-]{8,64})(?:;|$)/)
+      id = match ? match[1] : window.localStorage.getItem(name)
+    } catch (e) {}
+    if (!id || !/^[A-Za-z0-9_-]{8,64}$/.test(id)) id = randomId()
+
+    try {
+      var attrs = '; path=/; max-age=34560000; samesite=lax' + (location.protocol === 'https:' ? '; secure' : '')
+      var parts = location.hostname.split('.')
+      var stored = false
+      // Try the widest domain first; browsers refuse public suffixes such as "co.uk".
+      for (var n = 2; n <= parts.length && !stored && parts.length > 1; n++) {
+        var domain = parts.slice(-n).join('.')
+        document.cookie = name + '=' + id + attrs + '; domain=' + domain
+        stored = document.cookie.indexOf(name + '=' + id) !== -1
+      }
+      if (!stored) document.cookie = name + '=' + id + attrs
+    } catch (e) {}
+    try { window.localStorage.setItem(name, id) } catch (e) {}
+    return id
+  }
+
+  function randomId() {
+    var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+    var out = ''
+    var bytes = null
+    try {
+      bytes = new Uint8Array(20)
+      window.crypto.getRandomValues(bytes)
+    } catch (e) { bytes = null }
+    for (var j = 0; j < 20; j++) {
+      out += chars.charAt((bytes ? bytes[j] : Math.floor(Math.random() * 256)) % 62)
+    }
+    return out
+  }
+
   function onIgnoredEvent(reason, options) {
     if (reason) console.warn('Ignoring Event: ' + reason);
     options && options.callback && options.callback()
@@ -81,6 +126,7 @@
       u: url,
     }
     if (interacted) payload.i = 1
+    if (visitorId) payload.v = visitorId
 
     {{#if hash}}
     payload.h = 1
@@ -188,6 +234,7 @@
       if (automation) payload.a = automation
     }
     if (interacted) payload.i = 1
+    if (visitorId) payload.v = visitorId
 
     var request = new XMLHttpRequest();
     request.open('POST', endpoint, true);
@@ -209,6 +256,8 @@
 
   var queue = (window.plausible && window.plausible.q) || []
   window.plausible = trigger
+  // Lets the site pass the visitor to its checkout (e.g. Paddle custom_data) and server events.
+  trigger.visitorId = visitorId
   for (var i = 0; i < queue.length; i++) {
     trigger.apply(this, queue[i])
   }
