@@ -58,7 +58,7 @@
       <.section id="summary" title="Summary">
         <div class={[
           "grid grid-cols-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 divide-x divide-gray-100 dark:divide-gray-700",
-          if(mature, do: "lg:grid-cols-4", else: "lg:grid-cols-3")
+          if(mature, do: "lg:grid-cols-5", else: "lg:grid-cols-4")
         ]}>
           <.stat
             label={"Free cost · #{window}"}
@@ -66,6 +66,12 @@
             note={"#{totals.signups} sign-ups"}
           />
           <.stat label={"Revenue · #{window}"} value={usd(totals.revenue)} note="All paid orders" />
+          <.stat
+            label={"Profit · #{window}"}
+            value={usd(totals.profit)}
+            value_class={if(totals.profit < 0, do: "text-red-600 dark:text-red-400")}
+            note={"Revenue − free cost − paying users' cost (#{usd(totals.paid)})"}
+          />
           <.stat label="Free cost ÷ revenue" value={pct(totals.share)} note={window} />
           <.stat
             :if={mature}

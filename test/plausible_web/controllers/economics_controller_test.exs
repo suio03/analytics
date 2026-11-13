@@ -136,6 +136,7 @@ defmodule PlausibleWeb.EconomicsControllerTest do
     assert html =~ "$18.27"
     assert html =~ "5.0×"
     assert html =~ "Day (UTC)"
+    assert html =~ "Profit · 56 days"
     refute html =~ "never-render-this-token"
 
     settings = get(conn, "/economics.example/economics/settings") |> html_response(200)

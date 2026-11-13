@@ -387,12 +387,13 @@ defmodule PlausibleWeb.EconomicsView do
   attr(:label, :string, required: true)
   attr(:value, :string, required: true)
   attr(:note, :string, default: nil)
+  attr(:value_class, :any, default: nil)
 
   def stat(assigns) do
     ~H"""
     <div class="p-5">
       <p class="text-xs text-gray-500 dark:text-gray-400"><%= @label %></p>
-      <p class="mt-2 text-2xl font-semibold tabular-nums"><%= @value %></p>
+      <p class={["mt-2 text-2xl font-semibold tabular-nums", @value_class]}><%= @value %></p>
       <p :if={@note} class="mt-2 text-xs text-gray-500"><%= @note %></p>
     </div>
     """

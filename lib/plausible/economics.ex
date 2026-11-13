@@ -99,11 +99,14 @@ defmodule Plausible.Economics do
   @doc "Totals over the report's daily rows (the whole window)."
   def totals(rows) do
     free = sum(rows, "freeUsd")
+    paid = sum(rows, "paidUsd")
     revenue = sum(rows, "revenue")
 
     %{
       free: free,
+      paid: paid,
       revenue: revenue,
+      profit: revenue - free - paid,
       share: if(revenue > 0, do: free / revenue),
       signups: sum(rows, "signups")
     }

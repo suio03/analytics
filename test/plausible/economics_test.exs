@@ -43,4 +43,13 @@ defmodule Plausible.EconomicsTest do
 
     assert %{other: nil, minor: [], before: []} = Economics.split_sources(rows)
   end
+
+  test "totals: profit is revenue minus free cost minus paying users' cost" do
+    rows = [
+      %{"signups" => 3, "freeUsd" => 10, "paidUsd" => 4, "revenue" => 50},
+      %{"signups" => 2, "freeUsd" => 5, "paidUsd" => 1, "revenue" => 0}
+    ]
+
+    assert %{free: 15, paid: 5, revenue: 50, profit: 30, signups: 5} = Economics.totals(rows)
+  end
 end
