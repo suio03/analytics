@@ -143,7 +143,10 @@ defmodule PlausibleWeb.EconomicsControllerTest do
     refute settings =~ "never-render-this-token"
   end
 
-  test "a raw export is computed in the site's timezone", %{conn: conn, site: site} do
+  test "a raw export is computed in UTC days, times shown in the site's timezone", %{
+    conn: conn,
+    site: site
+  } do
     site =
       site |> Ecto.Changeset.change(timezone: "Australia/Melbourne") |> Plausible.Repo.update!()
 
@@ -157,7 +160,7 @@ defmodule PlausibleWeb.EconomicsControllerTest do
       assert params["days"] == "7"
 
       assert String.to_integer(params["since"]) ==
-               Plausible.Economics.Report.since("Australia/Melbourne", 7)
+               Plausible.Economics.Report.since("Etc/UTC", 7)
 
       Req.Test.json(conn, %{
         "format" => 2,
@@ -217,7 +220,6 @@ defmodule PlausibleWeb.EconomicsControllerTest do
     assert html =~ "Melbourne time (00:00 UTC)"
     assert html =~ "Also full yesterday"
     assert html =~ "Not full yesterday"
-    refute html =~ "Day (UTC)"
     assert html =~ ~s(data-economics-section="daily" data-collapsed-default="true")
     assert html =~ ~s(data-economics-section="payers" data-collapsed-default="true")
     assert html =~ ~s(data-economics-section="summary" data-collapsed-default="false")
@@ -228,8 +230,10 @@ defmodule PlausibleWeb.EconomicsControllerTest do
     assert html =~ "Creator monthly · iOS"
     assert html =~ "372"
     assert html =~ "-$9.50"
-    assert html =~ "Day (Melbourne)"
-    assert html =~ "Melbourne time"
+    assert html =~ "Day (UTC)"
+    start = PlausibleWeb.EconomicsView.utc_day_start("Australia/Melbourne")
+    assert html =~ "from #{start} Melbourne"
+    assert html =~ "UTC days · a day starts at #{start} Melbourne time"
     assert html =~ "There&#39;s An AI For That"
     assert html =~ "$0.42"
     assert html =~ "so far"

@@ -334,6 +334,11 @@ defmodule PlausibleWeb.EconomicsView do
 
   def local_time(_, _), do: "—"
 
+  @doc "HH:MM in a timezone at which the next UTC day starts (moves with daylight saving)."
+  def utc_day_start(tz, now \\ System.os_time(:second)) do
+    local_time((div(now, 86_400) + 1) * 86_400, tz)
+  end
+
   @doc "On how many of the days before today a quota (by index) filled up."
   def days_full(fq, index) do
     fq["days"]

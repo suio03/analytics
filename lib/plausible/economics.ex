@@ -60,6 +60,8 @@ defmodule Plausible.Economics do
   data (format 2) get `since` and their export is computed here; a format 1 app computes the report
   itself from `days` (UTC days) and it is shown as is.
   """
+  # Days and weeks are UTC ones, the same days the apps reset their free quotas on; `tz` (the
+  # site's timezone) is only for showing times and when a UTC day starts there.
   def fetch(%Source{} = source, days \\ 28, tz \\ "Etc/UTC") do
     opts = Application.get_env(:plausible, __MODULE__, [])
 
@@ -67,7 +69,7 @@ defmodule Plausible.Economics do
            [
              url: source.url,
              headers: [{"authorization", "Bearer #{source.token}"}],
-             params: [days: days, since: Report.since(tz, days), format: 2],
+             params: [days: days, since: Report.since("Etc/UTC", days), format: 2],
              receive_timeout: 30_000,
              retry: false,
              redirect: false
@@ -75,12 +77,12 @@ defmodule Plausible.Economics do
          ) do
       {:ok, %{status: 200, body: %{} = body}} when is_map_key(body, "users") ->
         if Report.raw?(body),
-          do: {:ok, Report.build(body, tz, days)},
+          do: {:ok, body |> Report.build("Etc/UTC", days) |> Map.put("timezone", tz)},
           else: {:error, "The endpoint did not return a cost report."}
 
       {:ok, %{status: 200, body: %{"daily" => d, "weeks" => w, "sources" => s} = body}}
       when is_list(d) and is_list(w) and is_list(s) ->
-        {:ok, Map.put_new(body, "timezone", "Etc/UTC")}
+        {:ok, Map.put(body, "timezone", tz)}
 
       {:ok, %{status: 200}} ->
         {:error, "The endpoint did not return a cost report."}

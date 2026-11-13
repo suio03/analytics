@@ -7,7 +7,9 @@
         <span :if={@report}>
           Updated <%= generated(@report["generatedAt"], @report["timezone"]) %> · last <%= @report[
             "days"
-          ] %> days, <%= tz_label(@report["timezone"]) %> time
+          ] %> UTC days · a day starts at <%= utc_day_start(@report["timezone"]) %> <%= tz_label(
+            @report["timezone"]
+          ) %> time
         </span>
       </p>
     </div>
@@ -317,7 +319,12 @@
           <table class="w-full text-sm text-left tabular-nums">
             <thead class="bg-gray-50 dark:bg-gray-850 text-xs text-gray-500 dark:text-gray-400">
               <tr>
-                <th class="px-5 py-3">Day (<%= tz_label(tz) %>)</th>
+                <th class="px-5 py-3">
+                  Day (UTC)
+                  <span :if={tz_label(tz) != "UTC"} class="font-normal">
+                    · from <%= utc_day_start(tz) %> <%= tz_label(tz) %>
+                  </span>
+                </th>
                 <th class="px-4 py-3 text-right">Sign-ups</th>
                 <th class="px-4 py-3 text-right">Free cost</th>
                 <th class="px-4 py-3 text-right">Paying users' cost</th>

@@ -11,11 +11,11 @@ Access matches Transactions: site owners, admins and super admins. Responses are
 
 ## Who computes what
 
-The app exports facts: its accounts, what each one cost and what they paid. Only the app knows what a call cost and whether its account had paid by then, so that stays there. This page does all the reporting: local days and weeks in the site's timezone, the window, first-touch source groups, the 30-day cohort window and payback (`lib/plausible/economics/report.ex`). Changing the report never needs a change in the apps; only a new kind of fact does.
+The app exports facts: its accounts, what each one cost and what they paid. Only the app knows what a call cost and whether its account had paid by then, so that stays there. This page does all the reporting: UTC days and weeks (the days the apps reset their free quotas on; the page shows when a UTC day starts in the site's timezone, e.g. 11:00 Melbourne in summer, 10:00 in winter), the window, first-touch source groups, the 30-day cohort window and payback (`lib/plausible/economics/report.ex`). Changing the report never needs a change in the apps; only a new kind of fact does.
 
 ## Export format (format 2)
 
-`GET <url>?days=N&since=<unix seconds>&format=2` with `Authorization: Bearer <token>`. `since` is the first moment of the window's first local day; return everything from then on (cap it at about 200 days back). `days` is for format 1 apps. JSON:
+`GET <url>?days=N&since=<unix seconds>&format=2` with `Authorization: Bearer <token>`. `since` is the first moment (00:00 UTC) of the window's first day; return everything from then on (cap it at about 200 days back). `days` is for format 1 apps. JSON:
 
 - `format`: `2`, `generatedAt` (ISO time), `notes`: what the app's cost does and doesn't include (strings, shown under the tables)
 - `users`: accounts created since `since`: `id`, `at` (unix seconds), `guest` (anonymous account, counted in cost but not as a sign-up), first touch `source` (utm_source / ?ref=), `medium`, `campaign`, `referrer` (host), `landing`, `tracked` (`false` for accounts from before the app recorded first touches), `platform` (`web`, `ios`, `android`, or null)
@@ -28,7 +28,7 @@ Fields beyond these are ignored, so an app can add facts before the page uses th
 
 Source groups: `source` when set; else the referrer, with sign-in redirects (`accounts.*`, `appleid.apple.com`) as direct, any `google.` host as `google`, `*bing.com` as `bing`, other hosts without `www.`; else `(before tracking)` when `tracked` is false, else `(direct or unknown)`.
 
-The window is the last N local days including today (7, 28, 90 or 180; 28 by default). The summary covers the whole window; by-day rows include days with no activity, and today is marked "so far". Weeks start on the local Monday, and a week is full once 30 days have passed since it ended.
+The window is the last N UTC days including today (7, 28, 90 or 180; 28 by default). The summary covers the whole window; by-day rows include days with no activity, and today is marked "so far". Weeks start on Monday 00:00 UTC, and a week is full once 30 days have passed since it ended.
 
 ## Format 1 (app-computed, deprecated)
 
@@ -36,7 +36,7 @@ An app that ignores `format` and returns `daily`, `weeks` and `sources` is shown
 
 ## Page
 
-**Free quota today** shows, when the app exports `freeQuotas`, how much of each free daily quota is used in the current UTC day and how long until the 00:00 UTC reset: a bar per quota (amber from 80%, red and "Full" with the time it filled), then the last 7 UTC days with each quota's use and the time it filled. These are UTC days because the app resets its quotas at UTC midnight, unlike the rest of the page.
+**Free quota today** shows, when the app exports `freeQuotas`, how much of each free daily quota is used in the current UTC day and how long until the 00:00 UTC reset: a bar per quota (amber from 80%, red and "Full" with the time it filled), then the last 7 UTC days with each quota's use and the time it filled. These are the same UTC days as the rest of the page, so today's quota use and today's by-day row cover the same hours. Times (fill time, reset, payers' last activity, last update) are shown in the site's timezone.
 
 **Paying users** lists accounts with a paid order in the window (lifetime totals), most paid first: country (billing, else sign-up), source, payments and refunds, credits used and left, model cost and margin (paid minus model cost), days from sign-up to first payment, and last activity. Its tiles: paying users and how many paid for the first time, paid per user, repeat buyers (two or more payments), total margin and unused credits. The section shows only when the app exports `payers`. Emails are shown, so the page stays owners and admins only.
 
