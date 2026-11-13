@@ -1,8 +1,8 @@
 defmodule PlausibleWeb.EconomicsView do
   use PlausibleWeb, :view
 
-  defdelegate frame(assigns), to: PlausibleWeb.PaymentsView
-  defdelegate csrf(), to: PlausibleWeb.PaymentsView
+  defdelegate frame(assigns), to: PlausibleWeb.Components.SiteFrame
+  defdelegate csrf(), to: PlausibleWeb.Components.SiteFrame
 
   def path(site, suffix \\ ""), do: "/#{URI.encode_www_form(site.domain)}/economics#{suffix}"
 
@@ -23,10 +23,10 @@ defmodule PlausibleWeb.EconomicsView do
   def times(n) when n >= 10, do: "#{round(n)}×"
   def times(n), do: :erlang.float_to_binary(n / 1, decimals: 1) <> "×"
 
-  def generated(iso, site) do
+  def generated(iso, tz) do
     case DateTime.from_iso8601(if is_binary(iso), do: iso, else: "") do
       {:ok, dt, _} ->
-        dt |> DateTime.shift_zone!(site.timezone) |> Calendar.strftime("%b %-d · %H:%M")
+        dt |> DateTime.shift_zone!(tz || "Etc/UTC") |> Calendar.strftime("%b %-d · %H:%M")
 
       _ ->
         "—"
@@ -142,35 +142,65 @@ defmodule PlausibleWeb.EconomicsView do
 
   def tz_label(_), do: "UTC"
 
+  attr(:id, :string, required: true)
   attr(:title, :string, required: true)
+  attr(:collapsed, :boolean, default: false, doc: "Collapsed until the viewer opens it")
+  slot(:inner_block, required: true)
 
-  @doc "A section heading with the handle that drags the section (or moves it with the arrow keys)."
-  def section_title(assigns) do
+  @doc """
+  A report section: a handle that drags it (or moves it with the arrow keys) and a title that
+  collapses it. `reorder_script/1` restores the viewer's order and open/closed state.
+  """
+  def section(assigns) do
     ~H"""
-    <div class="flex items-center gap-2 mb-1">
-      <button
-        type="button"
-        data-economics-handle
-        title="Drag to reorder (or focus and use the arrow keys)"
-        aria-label={"Move #{@title}"}
-        class="-ml-1 p-1 rounded cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 dark:text-gray-600 dark:hover:text-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-      >
-        <Heroicons.bars_2 class="w-4 h-4" />
-      </button>
-      <h2 class="text-lg font-semibold"><%= @title %></h2>
-    </div>
+    <section data-economics-section={@id} data-collapsed-default={to_string(@collapsed)} class="mb-10">
+      <div class="flex items-center gap-2 mb-1">
+        <button
+          type="button"
+          data-economics-handle
+          title="Drag to reorder (or focus and use the arrow keys)"
+          aria-label={"Move #{@title}"}
+          class="-ml-1 p-1 rounded cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 dark:text-gray-600 dark:hover:text-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+        >
+          <Heroicons.bars_2 class="w-4 h-4" />
+        </button>
+        <h2 class="text-lg font-semibold">
+          <button
+            type="button"
+            data-economics-toggle
+            aria-expanded={to_string(!@collapsed)}
+            aria-controls={"economics-#{@id}"}
+            class="group flex items-center gap-1.5 rounded hover:text-indigo-600 dark:hover:text-indigo-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+          >
+            <%= @title %>
+            <Heroicons.chevron_down
+              data-economics-chevron
+              class={[
+                "w-4 h-4 text-gray-400 transition-transform group-hover:text-indigo-500",
+                @collapsed && "-rotate-90"
+              ]}
+            />
+          </button>
+        </h2>
+      </div>
+      <div id={"economics-#{@id}"} data-economics-body class={[@collapsed && "hidden"]}>
+        <%= render_slot(@inner_block) %>
+      </div>
+    </section>
     """
   end
 
   @doc """
-  Restores the viewer's section order (kept in this browser, the same on every site) and lets them
-  drag sections by their handle or move a focused handle with the arrow keys.
+  Restores the viewer's section order and which sections are collapsed (kept in this browser, the
+  same on every site), lets them drag sections by their handle or move a focused handle with the
+  arrow keys, collapse a section from its title, and show the sources folded into "Other".
   """
   def reorder_script(assigns) do
     ~H"""
     <script>
       (function () {
-        var KEY = "economics-section-order";
+        var KEY = "economics-section-order-v2";
+        var COLLAPSED = "economics-collapsed";
         var box = document.querySelector("[data-economics-sections]");
         if (!box) return;
         function sections() {
@@ -190,6 +220,40 @@ defmodule PlausibleWeb.EconomicsView do
             all.slice().sort(function (a, b) { return rank(a) - rank(b); }).forEach(function (el) { box.appendChild(el); });
           }
         } catch (e) {}
+
+        var collapsed = {};
+        try {
+          var c = JSON.parse(localStorage.getItem(COLLAPSED) || "{}");
+          if (c && typeof c === "object" && !Array.isArray(c)) collapsed = c;
+        } catch (e) {}
+        function setCollapsed(el, closed) {
+          var body = el.querySelector("[data-economics-body]");
+          var toggle = el.querySelector("[data-economics-toggle]");
+          var chevron = el.querySelector("[data-economics-chevron]");
+          body.classList.toggle("hidden", closed);
+          toggle.setAttribute("aria-expanded", closed ? "false" : "true");
+          if (chevron) chevron.classList.toggle("-rotate-90", closed);
+        }
+        sections().forEach(function (el) {
+          if (typeof collapsed[idOf(el)] === "boolean") setCollapsed(el, collapsed[idOf(el)]);
+        });
+        box.addEventListener("click", function (e) {
+          var more = e.target.closest("[data-economics-more]");
+          if (more) {
+            var table = more.closest("tbody");
+            table.querySelectorAll("[data-economics-minor]").forEach(function (r) { r.classList.remove("hidden"); });
+            more.closest("tr").remove();
+            return;
+          }
+          var toggle = e.target.closest("[data-economics-toggle]");
+          if (!toggle) return;
+          var el = toggle.closest("[data-economics-section]");
+          var closed = toggle.getAttribute("aria-expanded") === "true";
+          setCollapsed(el, closed);
+          var fallback = el.getAttribute("data-collapsed-default") === "true";
+          if (closed === fallback) delete collapsed[idOf(el)]; else collapsed[idOf(el)] = closed;
+          try { localStorage.setItem(COLLAPSED, JSON.stringify(collapsed)); } catch (e) {}
+        });
 
         var dragging = null;
         box.addEventListener("pointerdown", function (e) {
@@ -259,11 +323,32 @@ defmodule PlausibleWeb.EconomicsView do
     end
   end
 
-  @doc "HH:MM in UTC of a unix second."
-  def utc_time(unix) when is_number(unix),
-    do: unix |> round() |> DateTime.from_unix!() |> Calendar.strftime("%H:%M")
+  @doc "HH:MM of a unix second in a timezone."
+  def local_time(unix, tz) when is_number(unix) do
+    unix
+    |> round()
+    |> DateTime.from_unix!()
+    |> DateTime.shift_zone!(tz || "Etc/UTC")
+    |> Calendar.strftime("%H:%M")
+  end
 
-  def utc_time(_), do: "—"
+  def local_time(_, _), do: "—"
+
+  @doc "On how many of the days before today a quota (by index) filled up."
+  def days_full(fq, index) do
+    fq["days"]
+    |> Enum.reject(&(&1["day"] == fq["today"]))
+    |> Enum.count(&(Enum.at(&1["cells"], index)["fullAt"] != nil))
+  end
+
+  @doc "How often a quota filled up on the days before today."
+  def full_days_label(0, 1), do: "Not full yesterday"
+  def full_days_label(1, 1), do: "Also full yesterday"
+  def full_days_label(0, past), do: "Not full in the last #{past} days"
+  def full_days_label(full, past), do: "Full on #{full} of the last #{past} days"
+
+  @doc "Days before today that a quota history covers."
+  def past_quota_days(fq), do: Enum.count(fq["days"], &(&1["day"] != fq["today"]))
 
   @doc "Time left until a unix second, as \"5h 12m\"."
   def time_left(at, now \\ System.os_time(:second)) do
@@ -277,6 +362,27 @@ defmodule PlausibleWeb.EconomicsView do
   def payback_class(n, true) when n < 1, do: "text-red-600 dark:text-red-400 font-semibold"
   def payback_class(n, true) when n < 3, do: "text-amber-600 dark:text-amber-400 font-semibold"
   def payback_class(_, true), do: "text-emerald-600 dark:text-emerald-400 font-semibold"
+
+  attr(:row, :map, required: true)
+  attr(:colored, :boolean, default: true, doc: "Color the payback (enough sign-ups to judge)")
+  attr(:minor, :boolean, default: false, doc: "Folded into Other until the viewer shows it")
+  slot(:label, required: true)
+
+  def source_row(assigns) do
+    ~H"""
+    <tr data-economics-minor={@minor} class={[@minor && "hidden"]}>
+      <td class="px-5 py-3 font-medium"><%= render_slot(@label) %></td>
+      <td class="px-4 py-3 text-right"><%= @row["signups"] %></td>
+      <td class="px-4 py-3 text-right"><%= usd(@row["freeUsd"]) %></td>
+      <td class="px-4 py-3 text-right"><%= per(@row["freePerSignup"]) %></td>
+      <td class="px-4 py-3 text-right"><%= usd(@row["revenue"]) %></td>
+      <td class="px-4 py-3 text-right"><%= @row["buyers"] %></td>
+      <td class={["px-4 py-3 text-right", payback_class(@row["payback"], @colored)]}>
+        <%= times(@row["payback"]) %>
+      </td>
+    </tr>
+    """
+  end
 
   attr(:label, :string, required: true)
   attr(:value, :string, required: true)

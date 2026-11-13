@@ -692,7 +692,6 @@ case mailer_adapter do
 end
 
 base_cron = [
-  {"*/30 * * * *", Plausible.Workers.ReconcilePayments},
   # Daily at midnight
   {"0 0 * * *", Plausible.Workers.RotateSalts},
   # hourly
@@ -735,7 +734,6 @@ cloud_cron = [
 crontab = if(is_selfhost, do: base_cron, else: base_cron ++ cloud_cron)
 
 base_queues = [
-  payments: 1,
   rotate_salts: 1,
   schedule_email_reports: 1,
   send_email_reports: 1,

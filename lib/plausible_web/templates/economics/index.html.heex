@@ -5,9 +5,9 @@
       <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
         What free users cost against what sign-ups pay.
         <span :if={@report}>
-          Updated <%= generated(@report["generatedAt"], @site) %> · last <%= @report["days"] %> days, <%= tz_label(
-            @report["timezone"]
-          ) %> time
+          Updated <%= generated(@report["generatedAt"], @report["timezone"]) %> · last <%= @report[
+            "days"
+          ] %> days, <%= tz_label(@report["timezone"]) %> time
         </span>
       </p>
     </div>
@@ -51,15 +51,40 @@
     <% totals = Plausible.Economics.totals(@report["daily"]) %>
     <% cohort_days = @report["cohortDays"] %>
     <% window = "#{@report["days"]} days" %>
+    <% tz = @report["timezone"] %>
     <% fq = @report["freeQuotas"] %>
+    <% mature = Plausible.Economics.mature_payback(@report["weeks"], cohort_days) %>
     <div data-economics-sections>
-      <section :if={fq} data-economics-section="quotas" class="mb-10">
-        <.section_title title="Free quota today" />
+      <.section id="summary" title="Summary">
+        <div class={[
+          "grid grid-cols-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 divide-x divide-gray-100 dark:divide-gray-700",
+          if(mature, do: "lg:grid-cols-4", else: "lg:grid-cols-3")
+        ]}>
+          <.stat
+            label={"Free cost · #{window}"}
+            value={usd(totals.free)}
+            note={"#{totals.signups} sign-ups"}
+          />
+          <.stat label={"Revenue · #{window}"} value={usd(totals.revenue)} note="All paid orders" />
+          <.stat label="Free cost ÷ revenue" value={pct(totals.share)} note={window} />
+          <.stat
+            :if={mature}
+            label="Payback · full cohorts"
+            value={times(mature)}
+            note={"Weeks whose sign-ups all had #{cohort_days} days"}
+          />
+        </div>
+      </.section>
+
+      <.section :if={fq} id="quotas" title="Free quota today">
         <p class="mb-3 text-sm text-gray-500 dark:text-gray-400">
-          UTC <%= fq["today"] %> · resets at 00:00 UTC, in <%= time_left(fq["resetsAt"]) %>. Once a quota is full, free users wait for the reset.
+          Resets at <%= local_time(fq["resetsAt"], tz) %> <%= tz_label(tz) %> time (00:00 UTC), in <%= time_left(
+            fq["resetsAt"]
+          ) %>. Once a quota is full, free users wait for the reset.
         </p>
+        <% past = past_quota_days(fq) %>
         <div class="grid grid-cols-2 lg:grid-cols-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 divide-x divide-gray-100 dark:divide-gray-700">
-          <div :for={q <- fq["quotas"]} class="p-5">
+          <div :for={{q, i} <- Enum.with_index(fq["quotas"])} class="p-5">
             <% {bar, text} = quota_color(q["used"], q["limit"]) %>
             <p class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
               <span><%= q["label"] %></span>
@@ -87,77 +112,32 @@
             </div>
             <p class="mt-2 text-xs text-gray-500 tabular-nums">
               <%= if q["used"] >= q["limit"] do %>
-                Full at <%= utc_time(q["fullAt"]) %> UTC · waits for 00:00 UTC
+                Full at <%= local_time(q["fullAt"], tz) %> · waits for the reset
               <% else %>
                 <%= quota_value(max(q["limit"] - q["used"], 0), q["unit"]) %> left · <%= pct(
                   quota_share(q["used"], q["limit"])
                 ) %> used
               <% end %>
             </p>
+            <% full = days_full(fq, i) %>
+            <p
+              :if={past > 0}
+              class={[
+                "mt-1 text-xs tabular-nums",
+                if(full > 0, do: "text-red-600 dark:text-red-400", else: "text-gray-400")
+              ]}
+            >
+              <%= full_days_label(full, past) %>
+            </p>
           </div>
         </div>
-        <div class="mt-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-x-auto">
-          <table class="w-full text-sm text-left tabular-nums">
-            <thead class="bg-gray-50 dark:bg-gray-850 text-xs text-gray-500 dark:text-gray-400">
-              <tr>
-                <th class="px-5 py-3">Day (UTC)</th>
-                <th :for={q <- fq["quotas"]} class="px-4 py-3 text-right">
-                  <%= q["label"] %>
-                  <span class="font-normal">/ <%= quota_value(q["limit"], q["unit"]) %></span>
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-              <tr :for={d <- fq["days"]}>
-                <td class="px-5 py-3 font-medium whitespace-nowrap">
-                  <%= d["day"] %>
-                  <span
-                    :if={d["day"] == fq["today"]}
-                    class="ml-1 text-xs font-normal text-gray-500"
-                  >
-                    so far
-                  </span>
-                </td>
-                <td
-                  :for={{q, c} <- Enum.zip(fq["quotas"], d["cells"])}
-                  class="px-4 py-3 text-right whitespace-nowrap"
-                >
-                  <span class={elem(quota_color(c["used"], q["limit"]), 1)}>
-                    <%= quota_value(c["used"], q["unit"]) %>
-                  </span>
-                  <span :if={c["fullAt"]} class="ml-1 text-xs text-red-600 dark:text-red-400">
-                    full <%= utc_time(c["fullAt"]) %>
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
+      </.section>
 
-      <section data-economics-section="summary" class="mb-10">
-        <.section_title title="Summary" />
-        <div class="grid grid-cols-2 lg:grid-cols-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 divide-x divide-gray-100 dark:divide-gray-700">
-          <.stat
-            label={"Free cost · #{window}"}
-            value={usd(totals.free)}
-            note={"#{totals.signups} sign-ups"}
-          />
-          <.stat label={"Revenue · #{window}"} value={usd(totals.revenue)} note="All paid orders" />
-          <.stat label="Free cost ÷ revenue" value={pct(totals.share)} note={window} />
-          <.stat
-            label="Payback · full cohorts"
-            value={times(Plausible.Economics.mature_payback(@report["weeks"], cohort_days))}
-            note={"Weeks whose sign-ups all had #{cohort_days} days"}
-          />
-        </div>
-      </section>
-
-      <section data-economics-section="sources" class="mb-10">
-        <.section_title title="By source" />
+      <.section id="sources" title="By source">
         <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
           First-touch source of each sign-up. Revenue within <%= cohort_days %> days of sign-up.
         </p>
+        <% split = Plausible.Economics.split_sources(@report["sources"]) %>
         <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-x-auto">
           <table class="w-full text-sm text-left tabular-nums">
             <thead class="bg-gray-50 dark:bg-gray-850 text-xs text-gray-500 dark:text-gray-400">
@@ -172,124 +152,39 @@
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-              <tr :for={r <- @report["sources"]}>
-                <td class="px-5 py-3 font-medium"><.source_label key={r["key"]} /></td>
-                <td class="px-4 py-3 text-right"><%= r["signups"] %></td>
-                <td class="px-4 py-3 text-right"><%= usd(r["freeUsd"]) %></td>
-                <td class="px-4 py-3 text-right"><%= per(r["freePerSignup"]) %></td>
-                <td class="px-4 py-3 text-right"><%= usd(r["revenue"]) %></td>
-                <td class="px-4 py-3 text-right"><%= r["buyers"] %></td>
-                <td class={[
-                  "px-4 py-3 text-right",
-                  payback_class(r["payback"], r["signups"] >= 10)
-                ]}>
-                  <%= times(r["payback"]) %>
-                </td>
-              </tr>
+              <.source_row :for={r <- split.major} row={r} colored={r["signups"] >= 10}>
+                <:label><.source_label key={r["key"]} /></:label>
+              </.source_row>
+              <.source_row
+                :if={split.other}
+                row={split.other}
+                colored={split.other["signups"] >= 10}
+              >
+                <:label>
+                  <span class="text-gray-500">Other · <%= split.other["count"] %> sources</span>
+                  <button
+                    type="button"
+                    data-economics-more
+                    class="ml-2 text-xs font-normal text-indigo-600 dark:text-indigo-400 hover:underline"
+                  >
+                    Show
+                  </button>
+                </:label>
+              </.source_row>
+              <.source_row :for={r <- split.minor} row={r} colored={false} minor>
+                <:label>
+                  <span class="pl-4 inline-block"><.source_label key={r["key"]} /></span>
+                </:label>
+              </.source_row>
+              <.source_row :for={r <- split.before} row={r} colored={false}>
+                <:label><.source_label key={r["key"]} /></:label>
+              </.source_row>
             </tbody>
           </table>
         </div>
-      </section>
+      </.section>
 
-      <section :if={@report["payers"]} data-economics-section="payers" class="mb-10">
-        <.section_title title="Paying users" />
-        <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
-          Accounts with a paid order in the last <%= window %>. Payments, credits and model cost are lifetime totals; margin is what they paid minus their model cost.
-        </p>
-        <% ps = Plausible.Economics.payers_summary(@report["payers"]) %>
-        <div class="grid grid-cols-2 lg:grid-cols-4 mb-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 divide-x divide-gray-100 dark:divide-gray-700">
-          <.stat
-            label={"Paying users · #{window}"}
-            value={Integer.to_string(ps.count)}
-            note={"#{ps.new} paid for the first time"}
-          />
-          <.stat label="Paid per user" value={usd(ps.per_payer)} note="Lifetime, before fees" />
-          <.stat label="Repeat buyers" value={pct(ps.repeat)} note="Two or more payments" />
-          <.stat
-            label="Margin over model cost"
-            value={usd(ps.margin)}
-            note={"#{ps.credits_left} credits still unused"}
-          />
-        </div>
-        <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-x-auto">
-          <table class="w-full text-sm text-left tabular-nums">
-            <thead class="bg-gray-50 dark:bg-gray-850 text-xs text-gray-500 dark:text-gray-400">
-              <tr>
-                <th class="px-5 py-3">User</th>
-                <th class="px-4 py-3">Country</th>
-                <th class="px-4 py-3">Source</th>
-                <th class="px-4 py-3 text-right">Payments</th>
-                <th class="px-4 py-3 text-right">Paid</th>
-                <th class="px-4 py-3 text-right">Credits used</th>
-                <th class="px-4 py-3 text-right">Credits left</th>
-                <th class="px-4 py-3 text-right">Model cost</th>
-                <th class="px-4 py-3 text-right">Margin</th>
-                <th class="px-4 py-3 text-right" title="Days from sign-up to first payment">
-                  Days to pay
-                </th>
-                <th class="px-4 py-3 text-right">Last active</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-              <tr :if={@report["payers"] == []}>
-                <td colspan="11" class="px-5 py-6 text-center text-gray-500">
-                  No paid orders in these <%= window %>.
-                </td>
-              </tr>
-              <tr :for={r <- @report["payers"]}>
-                <td class="px-5 py-3">
-                  <div class="font-medium whitespace-nowrap" title={r["id"]}>
-                    <%= r["email"] || r["id"] %>
-                  </div>
-                  <div class="text-xs text-gray-500 whitespace-nowrap">
-                    <%= payer_plan(r) %>
-                    <span :if={r["new"]} class="ml-1 text-emerald-600 dark:text-emerald-400">
-                      new
-                    </span>
-                  </div>
-                </td>
-                <td class="px-4 py-3 whitespace-nowrap">
-                  <.country code={r["country"]} from={r["countryFrom"]} />
-                </td>
-                <td class="px-4 py-3 whitespace-nowrap"><.source_label key={r["source"]} /></td>
-                <td class="px-4 py-3 text-right">
-                  <%= r["orders"] %>
-                  <div :if={r["refunds"] > 0} class="text-xs text-red-600 dark:text-red-400">
-                    <%= r["refunds"] %> refunded
-                  </div>
-                </td>
-                <td class="px-4 py-3 text-right">
-                  <%= usd(r["usd"]) %>
-                  <div :if={r["refunds"] > 0} class="text-xs text-red-600 dark:text-red-400">
-                    −<%= usd(r["refundedUsd"]) %>
-                  </div>
-                </td>
-                <td
-                  class="px-4 py-3 text-right"
-                  title={"Bought #{r["creditsBought"]}, free #{r["creditsGranted"]}"}
-                >
-                  <%= r["creditsUsed"] %>
-                </td>
-                <td class="px-4 py-3 text-right"><%= r["creditsLeft"] %></td>
-                <td class="px-4 py-3 text-right"><%= usd(r["costUsd"]) %></td>
-                <td class={[
-                  "px-4 py-3 text-right",
-                  if(r["margin"] < 0, do: "text-red-600 dark:text-red-400 font-semibold")
-                ]}>
-                  <%= usd(r["margin"]) %>
-                </td>
-                <td class="px-4 py-3 text-right"><%= r["daysToPay"] || "—" %></td>
-                <td class="px-4 py-3 text-right whitespace-nowrap text-gray-500">
-                  <%= short_date(r["lastActiveAt"], @report["timezone"]) %>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section data-economics-section="weeks" class="mb-10">
-        <.section_title title="By sign-up week" />
+      <.section id="weeks" title="By sign-up week">
         <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
           Weeks start Monday. A week is still filling until every sign-up has had <%= cohort_days %> days.
         </p>
@@ -326,15 +221,97 @@
             </tbody>
           </table>
         </div>
-      </section>
+      </.section>
 
-      <section data-economics-section="daily" class="mb-10">
-        <.section_title title="By day" />
+      <.section :if={@report["payers"]} id="payers" title="Paying users" collapsed>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+          Accounts with a paid order in the last <%= window %>. Payments and margin are lifetime totals; margin is what they paid minus their model cost (hover for cost and credits).
+        </p>
+        <% ps = Plausible.Economics.payers_summary(@report["payers"]) %>
+        <div class="grid grid-cols-2 lg:grid-cols-4 mb-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 divide-x divide-gray-100 dark:divide-gray-700">
+          <.stat
+            label={"Paying users · #{window}"}
+            value={Integer.to_string(ps.count)}
+            note={"#{ps.new} paid for the first time"}
+          />
+          <.stat label="Paid per user" value={usd(ps.per_payer)} note="Lifetime, before fees" />
+          <.stat label="Repeat buyers" value={pct(ps.repeat)} note="Two or more payments" />
+          <.stat
+            label="Margin over model cost"
+            value={usd(ps.margin)}
+            note={"#{ps.credits_left} credits still unused"}
+          />
+        </div>
         <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-x-auto">
           <table class="w-full text-sm text-left tabular-nums">
             <thead class="bg-gray-50 dark:bg-gray-850 text-xs text-gray-500 dark:text-gray-400">
               <tr>
-                <th class="px-5 py-3">Day (<%= tz_label(@report["timezone"]) %>)</th>
+                <th class="px-5 py-3">User</th>
+                <th class="px-4 py-3">Source</th>
+                <th class="px-4 py-3 text-right">Paid</th>
+                <th class="px-4 py-3 text-right">Margin</th>
+                <th class="px-4 py-3 text-right" title="Days from sign-up to first payment">
+                  Days to pay
+                </th>
+                <th class="px-4 py-3 text-right">Last active</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+              <tr :if={@report["payers"] == []}>
+                <td colspan="6" class="px-5 py-6 text-center text-gray-500">
+                  No paid orders in these <%= window %>.
+                </td>
+              </tr>
+              <tr :for={r <- @report["payers"]}>
+                <td class="px-5 py-3">
+                  <div class="font-medium whitespace-nowrap" title={r["id"]}>
+                    <%= r["email"] || r["id"] %>
+                  </div>
+                  <div class="text-xs text-gray-500 whitespace-nowrap">
+                    <%= payer_plan(r) %>
+                    <span :if={r["country"]} class="ml-1">
+                      · <.country code={r["country"]} from={r["countryFrom"]} />
+                    </span>
+                    <span :if={r["new"]} class="ml-1 text-emerald-600 dark:text-emerald-400">
+                      new
+                    </span>
+                  </div>
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap"><.source_label key={r["source"]} /></td>
+                <td class="px-4 py-3 text-right whitespace-nowrap">
+                  <%= usd(r["usd"]) %>
+                  <div class="text-xs text-gray-500">
+                    <%= r["orders"] %> <%= if r["orders"] == 1, do: "payment", else: "payments" %>
+                  </div>
+                  <div :if={r["refunds"] > 0} class="text-xs text-red-600 dark:text-red-400">
+                    <%= r["refunds"] %> refunded · −<%= usd(r["refundedUsd"]) %>
+                  </div>
+                </td>
+                <td
+                  class={[
+                    "px-4 py-3 text-right cursor-help",
+                    if(r["margin"] < 0, do: "text-red-600 dark:text-red-400 font-semibold")
+                  ]}
+                  title={"Model cost #{usd(r["costUsd"])} · credits used #{r["creditsUsed"]}, left #{r["creditsLeft"]} (bought #{r["creditsBought"]}, free #{r["creditsGranted"]})"}
+                >
+                  <%= usd(r["margin"]) %>
+                </td>
+                <td class="px-4 py-3 text-right"><%= r["daysToPay"] || "—" %></td>
+                <td class="px-4 py-3 text-right whitespace-nowrap text-gray-500">
+                  <%= short_date(r["lastActiveAt"], tz) %>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </.section>
+
+      <.section id="daily" title="By day" collapsed>
+        <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-x-auto">
+          <table class="w-full text-sm text-left tabular-nums">
+            <thead class="bg-gray-50 dark:bg-gray-850 text-xs text-gray-500 dark:text-gray-400">
+              <tr>
+                <th class="px-5 py-3">Day (<%= tz_label(tz) %>)</th>
                 <th class="px-4 py-3 text-right">Sign-ups</th>
                 <th class="px-4 py-3 text-right">Free cost</th>
                 <th class="px-4 py-3 text-right">Paying users' cost</th>
@@ -364,7 +341,7 @@
             </tbody>
           </table>
         </div>
-      </section>
+      </.section>
     </div>
     <.reorder_script />
 

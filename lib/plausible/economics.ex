@@ -1,3 +1,8 @@
+defmodule Plausible.Economics.Secret do
+  @moduledoc "An encrypted credential; uses the application's existing managed vault."
+  use Cloak.Ecto.Binary, vault: Plausible.Auth.TOTP.Vault
+end
+
 defmodule Plausible.Economics.Source do
   @moduledoc "A site's cost report endpoint (the app's own JSON) and its encrypted bearer token."
   use Ecto.Schema
@@ -6,7 +11,7 @@ defmodule Plausible.Economics.Source do
   schema "economics_sources" do
     belongs_to(:site, Plausible.Site)
     field(:url, :string)
-    field(:token, Plausible.Payments.Secret, redact: true)
+    field(:token, Plausible.Economics.Secret, redact: true)
     timestamps(type: :utc_datetime_usec)
   end
 
@@ -39,7 +44,7 @@ defmodule Plausible.Economics do
 
   def save_source(site_id, attrs) do
     existing = source(site_id)
-    # A blank token keeps the saved one, as with payment secrets.
+    # A blank token keeps the saved one.
     attrs =
       if existing,
         do: Map.reject(attrs, fn {k, v} -> k == "token" and v in [nil, ""] end),
@@ -124,6 +129,34 @@ defmodule Plausible.Economics do
       margin: sum(payers, "margin"),
       credits_left: sum(payers, "creditsLeft")
     }
+  end
+
+  @doc """
+  Splits source rows for display: sources with at least `min` sign-ups, the smaller ones folded
+  into one "Other" row (nil when there are none) with the rows it folds, and the sign-ups from
+  before source tracking, which go last because their payback means nothing.
+  """
+  def split_sources(rows, min \\ 5) do
+    {before, tracked} = Enum.split_with(rows, &(&1["key"] == "(before tracking)"))
+    {major, minor} = Enum.split_with(tracked, &((&1["signups"] || 0) >= min))
+
+    other =
+      if minor != [] do
+        free = sum(minor, "freeUsd")
+        signups = sum(minor, "signups")
+
+        %{
+          "count" => length(minor),
+          "signups" => signups,
+          "freeUsd" => free,
+          "freePerSignup" => if(signups > 0, do: free / signups, else: 0),
+          "revenue" => sum(minor, "revenue"),
+          "buyers" => sum(minor, "buyers"),
+          "payback" => if(free > 0, do: sum(minor, "revenue") / free)
+        }
+      end
+
+    %{major: major, other: other, minor: minor, before: before}
   end
 
   defp sum(rows, key), do: Enum.reduce(rows, 0, &((&1[key] || 0) + &2))

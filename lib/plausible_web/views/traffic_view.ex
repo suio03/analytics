@@ -3,10 +3,10 @@ defmodule PlausibleWeb.TrafficView do
 
   alias Plausible.EdgeRequests.Agents
 
-  defdelegate frame(assigns), to: PlausibleWeb.PaymentsView
+  defdelegate frame(assigns), to: PlausibleWeb.Components.SiteFrame
   defdelegate stat(assigns), to: PlausibleWeb.EconomicsView
 
-  defdelegate csrf, to: PlausibleWeb.PaymentsView
+  defdelegate csrf, to: PlausibleWeb.Components.SiteFrame
 
   def path(site, suffix \\ ""), do: "/#{URI.encode_www_form(site.domain)}/traffic#{suffix}"
 

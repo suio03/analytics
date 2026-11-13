@@ -191,7 +191,13 @@ defmodule PlausibleWeb.EconomicsControllerTest do
           ],
           "days" => [
             %{"day" => today, "key" => "video", "used" => 25.3, "fullAt" => midnight + 3600 * 3},
-            %{"day" => today, "key" => "analysis", "used" => 30, "fullAt" => nil}
+            %{"day" => today, "key" => "analysis", "used" => 30, "fullAt" => nil},
+            %{
+              "day" => Date.utc_today() |> Date.add(-1) |> Date.to_iso8601(),
+              "key" => "video",
+              "used" => 25,
+              "fullAt" => midnight - 3600
+            }
           ]
         }
       })
@@ -199,7 +205,21 @@ defmodule PlausibleWeb.EconomicsControllerTest do
 
     html = get(conn, "/economics.example/economics?days=7") |> html_response(200)
     assert html =~ ~s(data-economics-section="quotas")
-    assert html =~ "Full at 03:00 UTC"
+
+    full_at =
+      (midnight + 3600 * 3)
+      |> DateTime.from_unix!()
+      |> DateTime.shift_zone!("Australia/Melbourne")
+      |> Calendar.strftime("%H:%M")
+
+    assert html =~ "Full at #{full_at} · waits for the reset"
+    assert html =~ "Melbourne time (00:00 UTC)"
+    assert html =~ "Also full yesterday"
+    assert html =~ "Not full yesterday"
+    refute html =~ "Day (UTC)"
+    assert html =~ ~s(data-economics-section="daily" data-collapsed-default="true")
+    assert html =~ ~s(data-economics-section="payers" data-collapsed-default="true")
+    assert html =~ ~s(data-economics-section="summary" data-collapsed-default="false")
     assert html =~ "120 left · 20% used"
     assert html =~ ~s(data-economics-section="payers")
     assert html =~ "buyer@example.com"
