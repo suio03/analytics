@@ -64,10 +64,11 @@ defmodule Plausible.TrafficAlerts do
         title: "Forged search referrers",
         detail: "sessions claimed a search click that no search engine sends"
       }),
-      count_share_alert(reason.("oneshot_farm"), total, 1, 0, %{
+      count_share_alert(reason.("oneshot_farm") + reason.("oneshot_cohort"), total, 1, 0, %{
         kind: "visitor_farm",
         title: "One-shot visitor farm",
-        detail: "one-page sessions from farm networks were marked suspicious",
+        detail:
+          "one-page sessions from farm networks or crawler signatures were marked suspicious",
         level: :info
       })
     ]

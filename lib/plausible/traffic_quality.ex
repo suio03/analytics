@@ -19,6 +19,9 @@ defmodule Plausible.TrafficQuality do
       {"Search engine referrer no real click sends (http://, or Google with a query)", :strong},
     "oneshot_farm" =>
       {"One of 30+ one-page visitors from one network on one day (daily farm job)", :strong},
+    "oneshot_cohort" =>
+      {"One of 30+ one-page visitors with one browser build, OS, screen, country and referrer source on one day, across networks (farm job)",
+       :strong},
     "unknown_ua" => {"Browser can't be identified", :weak},
     "no_device" => {"Device type can't be identified", :weak},
     "datacenter_ip" => {"Cloud provider network", :weak},

@@ -18,9 +18,22 @@ defmodule Plausible.Workers.TrafficFarmsTest do
     |> Map.put(:network, network)
   end
 
+  # One client signature, as a proxy-rotating crawler sends it
+  @crawler [
+    browser: "Chrome",
+    browser_version: "157.0",
+    operating_system: "GNU/Linux",
+    operating_system_version: "",
+    screen_size: "Desktop",
+    country_code: "US",
+    referrer_source: "Google"
+  ]
+
   # ClickHouse isn't rolled back between tests, so only look at this test's site
-  defp farms(site) do
-    TrafficFarms.run(@now) |> Enum.filter(fn [site_id | _] -> site_id == site.id end)
+  defp farms(site, reason \\ "oneshot_farm") do
+    TrafficFarms.run(@now)
+    |> Map.fetch!(reason)
+    |> Enum.filter(fn [site_id | _] -> site_id == site.id end)
   end
 
   defp sessions(site) do
@@ -98,5 +111,54 @@ defmodule Plausible.Workers.TrafficFarmsTest do
     populate_stats(for _ <- 1..30, do: pageview(site, 0))
 
     assert [] = farms(site)
+  end
+
+  test "marks one-shot visitors sharing a client signature across networks", %{site: site} do
+    crawler = for n <- 1..30, do: pageview(site, n, @crawler)
+    # Same browser from elsewhere, and a visitor of the signature who came back
+    others = for n <- 1..10, do: pageview(site, n, Keyword.put(@crawler, :country_code, "DE"))
+
+    returning = [
+      pageview(site, 99, Keyword.put(@crawler, :user_id, 7)),
+      pageview(
+        site,
+        99,
+        @crawler |> Keyword.put(:user_id, 7) |> Keyword.put(:timestamp, ~N[2026-11-12 08:03:00])
+      )
+    ]
+
+    populate_stats(crawler ++ others ++ returning)
+
+    assert [] = farms(site)
+    assert [[_site_id, ~D[2026-11-12], _key]] = farms(site, "oneshot_cohort")
+
+    sessions = sessions(site)
+    assert Enum.count(sessions, &match?({_, 1, ["oneshot_cohort"]}, &1)) == 30
+    assert Enum.count(sessions, &match?({_, 0, []}, &1)) == 11
+  end
+
+  test "a signature whose visitors mostly engage is not a farm", %{site: site} do
+    oneshot = for n <- 1..30, do: pageview(site, n, @crawler)
+
+    engaged =
+      for i <- 1..10 do
+        attrs = Keyword.put(@crawler, :user_id, 100 + i)
+
+        [
+          pageview(site, i, attrs),
+          pageview(site, i, Keyword.put(attrs, :timestamp, ~N[2026-11-12 08:02:00]))
+        ]
+      end
+
+    populate_stats(oneshot ++ List.flatten(engaged))
+
+    assert [] = farms(site, "oneshot_cohort")
+  end
+
+  test "a network farm is marked once, as oneshot_farm", %{site: site} do
+    populate_stats(for _ <- 1..30, do: pageview(site, @farm, @crawler))
+
+    assert [_] = farms(site)
+    assert Enum.all?(sessions(site), &match?({@farm, 1, ["oneshot_farm"]}, &1))
   end
 end
