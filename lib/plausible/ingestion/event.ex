@@ -413,10 +413,31 @@ defmodule Plausible.Ingestion.Event do
     referrer_uri = URI.parse(referrer_str)
 
     if Request.sanitize_hostname(referrer_uri.host) !== Request.sanitize_hostname(uri.host) &&
-         referrer_uri.host !== "localhost" do
+         referrer_uri.host !== "localhost" &&
+         not passthrough_referrer?(referrer_uri.host) do
       RefInspector.parse(referrer_str)
     end
   end
+
+  # Sign-in and checkout pages the visitor is sent to and comes back from. The page they
+  # return to keeps this referrer until it is closed (reloads and restored tabs included),
+  # so a session started on it after 30 idle minutes was counted as traffic from Google,
+  # Waffo or PayPal. They count as no referrer instead.
+  @passthrough_referrer_hosts [
+    "accounts.google.com",
+    "appleid.apple.com",
+    "cashier.waffo.com",
+    "paypal.com",
+    "checkout.stripe.com",
+    "checkout.paddle.com",
+    "buy.paddle.com"
+  ]
+
+  defp passthrough_referrer?(host) when is_binary(host) do
+    Request.sanitize_hostname(host) in @passthrough_referrer_hosts
+  end
+
+  defp passthrough_referrer?(_), do: false
 
   defp get_referrer_source(request, ref) do
     tagged_source =

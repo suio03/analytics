@@ -463,6 +463,48 @@ defmodule PlausibleWeb.Api.ExternalControllerTest do
       assert session.referrer_source == ""
     end
 
+    for referrer <- [
+          "https://accounts.google.com/",
+          "https://appleid.apple.com/",
+          "https://cashier.waffo.com/pay/abc",
+          "https://www.paypal.com/checkoutnow"
+        ] do
+      test "ignores sign-in and checkout referrer #{referrer}", %{conn: conn, site: site} do
+        params = %{
+          name: "pageview",
+          url: "http://example.com/",
+          referrer: unquote(referrer),
+          domain: site.domain
+        }
+
+        conn =
+          conn
+          |> put_req_header("user-agent", @user_agent)
+          |> post("/api/event", params)
+
+        session = get_created_session(site)
+
+        assert response(conn, 202) == "ok"
+        assert session.referrer_source == ""
+        assert session.referrer == ""
+      end
+    end
+
+    test "keeps a Google search referrer", %{conn: conn, site: site} do
+      params = %{
+        name: "pageview",
+        url: "http://example.com/",
+        referrer: "https://www.google.com/",
+        domain: site.domain
+      }
+
+      conn
+      |> put_req_header("user-agent", @user_agent)
+      |> post("/api/event", params)
+
+      assert get_created_session(site).referrer_source == "Google"
+    end
+
     test "ignores localhost referrer", %{conn: conn, site: site} do
       params = %{
         name: "pageview",
