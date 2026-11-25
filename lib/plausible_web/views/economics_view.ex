@@ -216,7 +216,17 @@ defmodule PlausibleWeb.EconomicsView do
           var saved = JSON.parse(localStorage.getItem(KEY) || "[]");
           if (Array.isArray(saved)) {
             var all = sections();
-            var rank = function (el) { var i = saved.indexOf(idOf(el)); return i < 0 ? saved.length + all.indexOf(el) : i; };
+            // A section newer than the saved order goes right after the one before it on the page.
+            var rank = function (el) {
+              var i = saved.indexOf(idOf(el));
+              if (i >= 0) return i;
+              var at = all.indexOf(el);
+              for (var p = at - 1; p >= 0; p--) {
+                var j = saved.indexOf(idOf(all[p]));
+                if (j >= 0) return j + 0.5 + at / 1000;
+              }
+              return at / 1000 - 1;
+            };
             all.slice().sort(function (a, b) { return rank(a) - rank(b); }).forEach(function (el) { box.appendChild(el); });
           }
         } catch (e) {}
@@ -299,6 +309,204 @@ defmodule PlausibleWeb.EconomicsView do
           el.scrollIntoView({ block: "nearest" });
           save();
         });
+      })();
+    </script>
+    """
+  end
+
+  attr(:usage, :map, required: true)
+
+  @doc """
+  The "Model cost" section: what free and paying users cost over the days the viewer picks (today,
+  yesterday, the last 7 or 28 days, the page's whole window, or any two dates inside it), with a
+  bar per day and what the cost was spent on. The report's per-day rows are embedded as JSON and
+  summed in the browser, so changing the period doesn't ask the app again.
+  """
+  def usage(assigns) do
+    assigns =
+      assign(assigns,
+        json: Jason.encode!(assigns.usage, escape: :html_safe),
+        count: length(assigns.usage["days"])
+      )
+
+    ~H"""
+    <div data-economics-usage>
+      <div class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+        <span class="flex gap-3">
+          <button
+            :for={
+              {key, label} <- [
+                {"today", "Today"},
+                {"yesterday", "Yesterday"},
+                {"7", "7 days"},
+                {"28", "28 days"},
+                {"all", "All #{@count} days"}
+              ]
+            }
+            type="button"
+            data-usage-preset={key}
+            aria-pressed="false"
+            class="text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"
+          >
+            <%= label %>
+          </button>
+        </span>
+        <span class="flex items-center gap-2 text-gray-500">
+          <input
+            type="date"
+            data-usage-from
+            aria-label="From (UTC day)"
+            class="rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 py-1 px-2 text-sm"
+          /> to
+          <input
+            type="date"
+            data-usage-to
+            aria-label="To (UTC day)"
+            class="rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 py-1 px-2 text-sm"
+          />
+        </span>
+      </div>
+      <div data-usage-out></div>
+      <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+        UTC days. A cost counts as a paying user's from that account's first paid order on; before it, as a free user's. To go further back, widen the page's window at the top.
+      </p>
+    </div>
+    <script type="application/json" id="economics-usage-data">
+      <%= Phoenix.HTML.raw(@json) %>
+    </script>
+    <script>
+      (function () {
+        var root = document.querySelector("[data-economics-usage]");
+        var src = document.getElementById("economics-usage-data");
+        if (!root || !src) return;
+        var data;
+        try { data = JSON.parse(src.textContent); } catch (e) { return; }
+        var days = data.days, kinds = data.kinds, rows = data.rows, last = days.length - 1;
+        var from = root.querySelector("[data-usage-from]");
+        var to = root.querySelector("[data-usage-to]");
+        var out = root.querySelector("[data-usage-out]");
+        var FREE = "#f59e0b", PAID = "#6366f1";
+
+        function esc(s) {
+          return String(s).replace(/[&<>"']/g, function (c) {
+            return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+          });
+        }
+        function usd(n) {
+          if (!n) return "$0";
+          return "$" + (n >= 100 ? Math.round(n).toLocaleString("en-US") : n.toFixed(2));
+        }
+        function count(n, one, many) { return n + " " + (n === 1 ? one : many); }
+        function shortDay(iso) {
+          var d = new Date(iso + "T00:00:00Z");
+          return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+        }
+
+        function compute(a, b) {
+          var r = { free: 0, paid: 0, freeUsers: {}, paidUsers: {}, kinds: kinds.map(function () { return [0, 0]; }), days: [] };
+          for (var d = a; d <= b; d++) r.days.push([0, 0]);
+          rows.forEach(function (x) {
+            if (x[0] < a || x[0] > b) return;
+            r.free += x[3]; r.paid += x[4];
+            r.kinds[x[2]][0] += x[3]; r.kinds[x[2]][1] += x[4];
+            r.days[x[0] - a][0] += x[3]; r.days[x[0] - a][1] += x[4];
+            if (x[1] >= 0 && x[3] > 0) r.freeUsers[x[1]] = 1;
+            if (x[1] >= 0 && x[4] > 0) r.paidUsers[x[1]] = 1;
+          });
+          r.freeUsers = Object.keys(r.freeUsers).length;
+          r.paidUsers = Object.keys(r.paidUsers).length;
+          return r;
+        }
+
+        function tile(label, color, value, note) {
+          return '<div class="p-5"><p class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">' +
+            (color ? '<span class="w-2 h-2 rounded-full" style="background:' + color + '"></span>' : "") + label + "</p>" +
+            '<p class="mt-2 text-2xl font-semibold tabular-nums">' + value + "</p>" +
+            '<p class="mt-2 text-xs text-gray-500 tabular-nums">' + note + "</p></div>";
+        }
+        function perUser(usd_, n) {
+          return n ? count(n, "account", "accounts") + " · " + usd(usd_ / n) + " each" : "No accounts";
+        }
+
+        function render(a, b) {
+          var r = compute(a, b), total = r.free + r.paid, n = b - a + 1;
+          var html = '<div class="grid grid-cols-1 sm:grid-cols-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 divide-y sm:divide-y-0 sm:divide-x divide-gray-100 dark:divide-gray-700">' +
+            tile("Free users", FREE, usd(r.free), perUser(r.free, r.freeUsers)) +
+            tile("Paying users", PAID, usd(r.paid), perUser(r.paid, r.paidUsers)) +
+            tile("Total", null, usd(total), n > 1 ? usd(total / n) + " a day over " + n + " days" : (total ? Math.round((r.free / total) * 100) + "% from free users" : "No model cost")) +
+            "</div>";
+
+          if (n > 1) {
+            var top = Math.max.apply(null, r.days.map(function (d) { return d[0] + d[1]; })) || 1;
+            html += '<div class="mt-4 p-5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">' +
+              '<div class="flex items-end gap-px h-28">' +
+              r.days.map(function (d, i) {
+                var day = days[a + i];
+                return '<div class="flex-1 h-full flex flex-col justify-end" title="' + esc(shortDay(day) + (a + i === last ? " (so far)" : "") + " · free " + usd(d[0]) + " · paying " + usd(d[1])) + '">' +
+                  '<div style="height:' + ((d[1] / top) * 100).toFixed(1) + "%;background:" + PAID + '"></div>' +
+                  '<div style="height:' + ((d[0] / top) * 100).toFixed(1) + "%;background:" + FREE + '"></div></div>';
+              }).join("") + "</div>" +
+              '<div class="mt-2 flex justify-between text-xs text-gray-500 tabular-nums"><span>' + shortDay(days[a]) + "</span><span>Highest day " + usd(top) + "</span><span>" + shortDay(days[b]) + (b === last ? " · so far" : "") + "</span></div></div>";
+          }
+
+          var order = kinds.map(function (k, i) { return i; }).filter(function (i) { return r.kinds[i][0] + r.kinds[i][1] > 0; })
+            .sort(function (x, y) { return r.kinds[y][0] + r.kinds[y][1] - (r.kinds[x][0] + r.kinds[x][1]); });
+          if (data.labelled && order.length) {
+            html += '<div class="mt-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-x-auto">' +
+              '<table class="w-full text-sm text-left tabular-nums"><thead class="bg-gray-50 dark:bg-gray-850 text-xs text-gray-500 dark:text-gray-400"><tr>' +
+              '<th class="px-5 py-3">Spent on</th><th class="px-4 py-3 text-right">Free users</th><th class="px-4 py-3 text-right">Paying users</th><th class="px-4 py-3 text-right">Total</th><th class="px-4 py-3 text-right">Share</th></tr></thead>' +
+              '<tbody class="divide-y divide-gray-100 dark:divide-gray-700">' +
+              order.map(function (i) {
+                var k = r.kinds[i], sum = k[0] + k[1];
+                return '<tr><td class="px-5 py-3 font-medium">' + esc(kinds[i]) + '</td><td class="px-4 py-3 text-right">' + usd(k[0]) +
+                  '</td><td class="px-4 py-3 text-right">' + usd(k[1]) + '</td><td class="px-4 py-3 text-right">' + usd(sum) +
+                  '</td><td class="px-4 py-3 text-right text-gray-500">' + Math.round((sum / total) * 100) + "%</td></tr>";
+              }).join("") + "</tbody></table></div>";
+          }
+          out.innerHTML = html;
+        }
+
+        function clamp(i) { return Math.min(Math.max(i, 0), last); }
+        function apply(a, b, preset) {
+          a = clamp(a); b = clamp(b);
+          if (a > b) { var t = a; a = b; b = t; }
+          from.value = days[a]; to.value = days[b];
+          root.querySelectorAll("[data-usage-preset]").forEach(function (el) {
+            var on = el.getAttribute("data-usage-preset") === preset;
+            el.setAttribute("aria-pressed", on ? "true" : "false");
+            el.classList.toggle("font-semibold", on);
+            el.classList.toggle("text-indigo-600", on);
+            el.classList.toggle("text-gray-500", !on);
+          });
+          render(a, b);
+        }
+        function preset(name) {
+          if (name === "today") return [last, last];
+          if (name === "yesterday") return [last - 1, last - 1];
+          if (name === "all") return [0, last];
+          return [last - Number(name) + 1, last];
+        }
+        root.querySelectorAll("[data-usage-preset]").forEach(function (el) {
+          var name = el.getAttribute("data-usage-preset");
+          // A preset longer than the page's window would show the same days as "all".
+          if (/^\d+$/.test(name) && Number(name) >= days.length) { el.remove(); return; }
+          if (name === "yesterday" && last < 1) { el.remove(); return; }
+          el.addEventListener("click", function () { var p = preset(name); apply(p[0], p[1], name); });
+        });
+        function custom() {
+          if (!from.value || !to.value) return;
+          // A typed date outside the window becomes the window's nearest day.
+          var at = function (v) { return v < days[0] ? 0 : v > days[last] ? last : days.indexOf(v); };
+          var a = at(from.value), b = at(to.value);
+          if (a < 0 || b < 0) return;
+          apply(a, b, "");
+        }
+        from.min = to.min = days[0]; from.max = to.max = days[last];
+        from.addEventListener("change", custom);
+        to.addEventListener("change", custom);
+        var first = last >= 7 ? "7" : "all";
+        var p = preset(first);
+        apply(p[0], p[1], first);
       })();
     </script>
     """

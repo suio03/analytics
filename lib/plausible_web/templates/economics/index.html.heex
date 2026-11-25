@@ -141,6 +141,10 @@
         </div>
       </.section>
 
+      <.section :if={@report["usage"]} id="usage" title="Model cost: free and paying users">
+        <.usage usage={@report["usage"]} />
+      </.section>
+
       <.section id="sources" title="By source">
         <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
           First-touch source of each sign-up. Revenue within <%= cohort_days %> days of sign-up.

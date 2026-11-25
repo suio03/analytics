@@ -45,6 +45,7 @@ defmodule Plausible.Economics.Report do
         %{
           user: c["user"],
           date: local_date(num(c["at"]), tz),
+          kind: blank_to_nil(c["kind"]),
           free: num(c["free"]),
           paid: num(c["paid"])
         }
@@ -72,10 +73,52 @@ defmodule Plausible.Economics.Report do
       "cohortDays" => @cohort_days,
       "notes" => notes(raw["notes"], guests, days),
       "daily" => daily(start, today, users, costs, orders),
+      "usage" => usage(start, today, costs),
       "weeks" => weeks(users, costs, orders, tz, now),
       "sources" => sources(users, costs, orders),
       "payers" => payers(raw["payers"], since),
       "freeQuotas" => free_quotas(raw["freeQuotas"], now)
+    }
+  end
+
+  @doc """
+  Model cost per day, account and kind, for the page's "Model cost" section, which sums it in the
+  browser for the days the viewer picks: `days` (ISO dates, oldest first), `kinds` (labels the app
+  gave its costs; "Other" for costs without one), `labelled` (the app names kinds at all) and
+  `rows` of `[day index, account index or -1, kind index, free USD, paid USD]`. Accounts are
+  indexes only, so no ids reach the page.
+  """
+  def usage(start, today, costs) do
+    dates = Enum.to_list(Date.range(start, today))
+    day_index = dates |> Enum.with_index() |> Map.new()
+    kind_of = fn c -> c.kind || "Other" end
+    kinds = costs |> Enum.map(kind_of) |> Enum.uniq() |> Enum.sort()
+    kind_index = kinds |> Enum.with_index() |> Map.new()
+
+    user_index =
+      costs
+      |> Enum.map(& &1.user)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+      |> Enum.with_index()
+      |> Map.new()
+
+    rows =
+      costs
+      |> Enum.filter(&Map.has_key?(day_index, &1.date))
+      |> Enum.group_by(
+        &{day_index[&1.date], Map.get(user_index, &1.user, -1), kind_index[kind_of.(&1)]}
+      )
+      |> Enum.map(fn {{day, user, kind}, cs} ->
+        [day, user, kind, Float.round(sum(cs, :free) / 1, 4), Float.round(sum(cs, :paid) / 1, 4)]
+      end)
+      |> Enum.sort()
+
+    %{
+      "days" => Enum.map(dates, &Date.to_iso8601/1),
+      "kinds" => kinds,
+      "labelled" => Enum.any?(costs, & &1.kind),
+      "rows" => rows
     }
   end
 

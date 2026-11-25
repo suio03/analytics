@@ -167,7 +167,9 @@ defmodule PlausibleWeb.EconomicsControllerTest do
         "generatedAt" => "2026-11-10T10:00:00Z",
         "notes" => ["Free cost: model calls."],
         "users" => [%{"id" => "u1", "at" => now - 60, "source" => "taaft"}],
-        "costs" => [%{"user" => "u1", "at" => now - 60, "free" => 0.42, "paid" => 0}],
+        "costs" => [
+          %{"user" => "u1", "at" => now, "kind" => "Video", "free" => 0.42, "paid" => 0}
+        ],
         "orders" => [],
         "payers" => [
           %{
@@ -209,6 +211,10 @@ defmodule PlausibleWeb.EconomicsControllerTest do
 
     html = get(conn, "/economics.example/economics?days=7") |> html_response(200)
     assert html =~ ~s(data-economics-section="quotas")
+    assert html =~ ~s(data-economics-section="usage")
+    assert html =~ ~s("kinds":["Video"])
+    assert html =~ ~r/"rows":\[\[\d,0,0,0.42,0.0\]\]/
+    assert html =~ "All 7 days"
 
     full_at =
       (midnight + 3600 * 3)
