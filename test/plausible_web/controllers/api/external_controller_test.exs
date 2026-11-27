@@ -506,7 +506,7 @@ defmodule PlausibleWeb.Api.ExternalControllerTest do
     end
 
     for referrer <- ["https://gemini.google.com/", "https://gemini.google.com/app/abc123"] do
-      test "counts Gemini referrer #{referrer} as Gemini, not Google", %{conn: conn, site: site} do
+      test "Gemini referrer #{referrer} is Gemini, not Google", %{conn: conn, site: site} do
         params = %{
           name: "pageview",
           url: "http://example.com/",

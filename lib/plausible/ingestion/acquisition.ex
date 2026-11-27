@@ -17,16 +17,14 @@ defmodule Plausible.Ingestion.Acquisition do
 
     [{"referers.yml", map}] = RefInspector.Database.list(:default)
 
-    Enum.flat_map(map, fn {_, entries} ->
-      Enum.map(entries, fn {_, _, _, _, _, _, name} ->
-        :ets.insert(__MODULE__, {String.downcase(name), name})
-      end)
-    end)
+    database_names = for {_, entries} <- map, {_, _, _, _, _, _, name} <- entries, do: name
 
-    # Sources the ingestion sets itself (e.g. Gemini), so ?utm_source=gemini lands on the same name.
-    Enum.each(Map.values(Plausible.Ingestion.Event.own_source_hosts()), fn name ->
+    # Sources ingestion sets itself (Gemini), so ?utm_source=gemini records the same name.
+    own_names = Map.values(Plausible.Ingestion.Event.own_source_hosts())
+
+    for name <- database_names ++ own_names do
       :ets.insert(__MODULE__, {String.downcase(name), name})
-    end)
+    end
   end
 
   def find_mapping(source) do
