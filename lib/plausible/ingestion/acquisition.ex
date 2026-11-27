@@ -22,6 +22,11 @@ defmodule Plausible.Ingestion.Acquisition do
         :ets.insert(__MODULE__, {String.downcase(name), name})
       end)
     end)
+
+    # Sources the ingestion sets itself (e.g. Gemini), so ?utm_source=gemini lands on the same name.
+    Enum.each(Map.values(Plausible.Ingestion.Event.own_source_hosts()), fn name ->
+      :ets.insert(__MODULE__, {String.downcase(name), name})
+    end)
   end
 
   def find_mapping(source) do
