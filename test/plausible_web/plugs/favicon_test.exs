@@ -94,21 +94,6 @@ defmodule PlausibleWeb.FaviconTest do
     assert conn.resp_body == "favicon response body"
   end
 
-  test "shows the Gemini icon for Gemini, not Google's", %{plug_opts: plug_opts} do
-    expect(
-      Plausible.HTTPClient.Mock,
-      :get,
-      fn "https://icons.duckduckgo.com/ip3/gemini.google.com.ico" ->
-        {:ok, %Finch.Response{status: 200, body: "gemini icon"}}
-      end
-    )
-
-    conn = conn(:get, "/favicon/sources/Gemini") |> Favicon.call(plug_opts)
-
-    assert conn.status == 200
-    assert conn.resp_body == "gemini icon"
-  end
-
   test "copies content-type header from the proxied response", %{plug_opts: plug_opts} do
     expect(
       Plausible.HTTPClient.Mock,

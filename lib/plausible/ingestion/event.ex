@@ -415,26 +415,7 @@ defmodule Plausible.Ingestion.Event do
     if Request.sanitize_hostname(referrer_uri.host) !== Request.sanitize_hostname(uri.host) &&
          referrer_uri.host !== "localhost" &&
          not passthrough_referrer?(referrer_uri.host) do
-      referrer_str
-      |> RefInspector.parse()
-      |> own_source(referrer_uri.host)
-    end
-  end
-
-  # Google products the referrer database files under "Google" (it lists the bare
-  # google.com and matches every subdomain), so Gemini answers were counted as Google
-  # search traffic. They get their own source.
-  @own_source_hosts %{
-    "gemini.google.com" => "Gemini",
-    "bard.google.com" => "Gemini"
-  }
-
-  def own_source_hosts, do: @own_source_hosts
-
-  defp own_source(ref, host) do
-    case Map.fetch(@own_source_hosts, Request.sanitize_hostname(host)) do
-      {:ok, source} -> %{ref | source: source}
-      :error -> ref
+      RefInspector.parse(referrer_str)
     end
   end
 

@@ -505,40 +505,6 @@ defmodule PlausibleWeb.Api.ExternalControllerTest do
       assert get_created_session(site).referrer_source == "Google"
     end
 
-    for referrer <- ["https://gemini.google.com/", "https://gemini.google.com/app/abc123"] do
-      test "Gemini referrer #{referrer} is Gemini, not Google", %{conn: conn, site: site} do
-        params = %{
-          name: "pageview",
-          url: "http://example.com/",
-          referrer: unquote(referrer),
-          domain: site.domain
-        }
-
-        conn
-        |> put_req_header("user-agent", @user_agent)
-        |> post("/api/event", params)
-
-        session = get_created_session(site)
-        assert session.referrer_source == "Gemini"
-        assert session.referrer =~ "gemini.google.com"
-        assert session.channel == "Referral"
-      end
-    end
-
-    test "utm_source=gemini is recorded as Gemini", %{conn: conn, site: site} do
-      params = %{
-        name: "pageview",
-        url: "http://example.com/?utm_source=gemini",
-        domain: site.domain
-      }
-
-      conn
-      |> put_req_header("user-agent", @user_agent)
-      |> post("/api/event", params)
-
-      assert get_created_session(site).referrer_source == "Gemini"
-    end
-
     test "ignores localhost referrer", %{conn: conn, site: site} do
       params = %{
         name: "pageview",
